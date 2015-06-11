@@ -1,0 +1,59 @@
+[user]
+	name = Jonathan R. Wallace
+	email = jonathan.wallace@gmail.com
+[color]
+	diff = auto
+	status = auto
+	branch = auto
+	interactive = auto
+	ui = always
+[alias]
+	ds = diff --staged
+	st = status
+	ci = commit -v
+	co = checkout
+	br = branch
+	ctags = !.git/hooks/ctags
+	lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative
+  pr = !sh -c 'git log $0..next-release --ancestry-path --merges --oneline | tail -1'
+[merge]
+	tool = p4merge
+  conflictstyle=diff3
+	summary = true
+[core]
+	excludesfile = /opt/boxen/config/git/gitignore
+	autocrlf = input
+[apply]
+	whitespace = nowarn
+[pack]
+	threads = 0
+[diff]
+	renamelimit = 0
+[github]
+	user = wallace
+	;token = <token_here>
+
+[init]
+	templatedir = ~/.git_template
+[rerere]
+	enabled = true
+[mergetool]
+  prompt = false
+  keepBackup = false
+[mergetool "fugitive"]
+  cmd = mvim -f -c "Gdiff" "$MERGED"
+[mergetool "meld"]
+  cmd = $HOME/bin/meldmerge $BASE $LOCAL $REMOTE $MERGED
+[mergetool "p4merge"]
+  cmd = /Applications/p4merge.app/Contents/Resources/launchp4merge "$PWD/$BASE" "$PWD/$LOCAL" "$PWD/$REMOTE" "$PWD/$MERGED"
+  keepTemporaries = false
+  trustExitCode = false
+[mergetool "gvim"]
+	cmd = mvim \"+Gdiff\" $MERGED
+[push]
+	default = simple
+[pull]
+	rebase = preserve
+
+[hub]
+protocol = https
