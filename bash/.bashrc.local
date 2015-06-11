@@ -1,0 +1,65 @@
+# only add a path once to PATH
+# from
+# http://superuser.com/a/39995/33387
+pathadd() {
+    if [ -d "$1" ] && [[ ":$PATH:" != *":$1:"* ]]; then
+        PATH="${PATH:+"$PATH:"}$1"
+    fi
+}
+
+pathadd ~/bin
+
+# history settings
+# export HISTFILE=/Users/jonathanwallace/.bash_history
+export HISTFILESIZE=10000 # amt of cmds in HISTFILE
+export HISTSIZE=10000     # amt of cmds in history list of current session
+export HISTAPPEND=true    # all bash shells will share the same history file instead of overwritting
+# from http://www.numerati.com/2011/08/03/bash-goodies-turbocharging-your-history/
+# export PROMPT_COMMAND="history -a; history -n; $PROMPT_COMMAND"
+export HISTTIMEFORMAT="%F %T "
+export HISTCONTROL=ignoredups:erasedups
+
+# Don't directly execute the result of history expansion.
+# Add to editing buffer instead.
+shopt -s histverify
+
+# Make space perform history expansion.
+#bindkey ' ' magic-space '
+
+export EDITOR=`which vim`
+
+# Make less work with RAW ASCII colors
+# from http://blog.0x1fff.com/2009/11/linux-tip-color-enabled-pager-less.html
+export LESS="-RSM~gIsw"
+# R - Raw color codes in output (don't remove color codes)
+# S - Don't wrap lines, just cut off too long text
+# M - Long prompts ("Line X of Y")
+# ~ - Don't show those weird ~ symbols on lines after EOF
+# g - Highlight results when searching with slash key (/)
+# I - Case insensitive search
+# s - Squeeze empty lines to one
+# w - Highlight first line after PgDn
+
+# uncomment for a colored prompt, if the terminal has the capability; turned
+# off by default to not distract the user: the focus in a terminal window
+# should be on the output of commands, not on the prompt
+force_color_prompt=yes
+if [ -n "$force_color_prompt" ]; then
+    if [ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null; then
+	# We have color support; assume it's compliant with Ecma-48
+	# (ISO/IEC-6429). (Lack of such support is extremely rare, and such
+	# a case would tend to support setf rather than setaf.)
+	color_prompt=yes
+    else
+	color_prompt=
+    fi
+fi
+
+if [ "$color_prompt" = yes ]; then
+    PS1='${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+else
+    PS1='${debian_chroot:+($debian_chroot)}\u@\h:\w\$ '
+fi
+unset color_prompt force_color_prompt
+
+alias tmux="TERM=screen-256color-bce tmux"
