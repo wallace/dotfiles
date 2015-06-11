@@ -1,0 +1,8 @@
+# causes the b key not to work in terminal or xterm
+# bind -v
+
+# readline functionality
+# This alters the default behavior of the completion functions. If set to ‘on’,
+# words which have more than one possible completion cause the matches to be
+# listed immediately instead of ringing the bell.
+set show-all-if-ambiguous on
