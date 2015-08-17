@@ -21,7 +21,7 @@ set -o vi
 alias ..='cd ..'
 
 # history settings
-export HISTFILE=/Users/jonathanwallace/.bash_history
+export HISTFILE=$HOME/.bash_history
 export HISTFILESIZE=10000 # amt of cmds in HISTFILE
 export HISTSIZE=10000     # amt of cmds in history list of current session
 export HISTAPPEND=true    # all bash shells will share the same history file instead of overwritting
