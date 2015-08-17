@@ -26,7 +26,7 @@ export HISTFILESIZE=10000 # amt of cmds in HISTFILE
 export HISTSIZE=10000     # amt of cmds in history list of current session
 export HISTAPPEND=true    # all bash shells will share the same history file instead of overwritting
 # from http://www.numerati.com/2011/08/03/bash-goodies-turbocharging-your-history/
-# export PROMPT_COMMAND="history -a; history -n; $PROMPT_COMMAND"
+export PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND$'\n'}history -a; history -c; history -r"
 export HISTTIMEFORMAT="%F %T "
 export HISTCONTROL=ignoredups:erasedups
 
