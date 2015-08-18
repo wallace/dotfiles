@@ -120,3 +120,5 @@ export LESS="-RSM~gIsw"
 # w - Highlight first line after PgDn
 
 alias tmux="TERM=screen-256color-bce tmux"
+export PATH="$HOME/.rbenv/bin:$PATH"
+eval "$(rbenv init -)"
