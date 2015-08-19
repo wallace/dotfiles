@@ -6,3 +6,6 @@
 # words which have more than one possible completion cause the matches to be
 # listed immediately instead of ringing the bell.
 set show-all-if-ambiguous on
+
+# vi keys ALL the places
+set editing-mode vi
