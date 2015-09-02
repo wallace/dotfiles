@@ -122,3 +122,14 @@ export LESS="-RSM~gIsw"
 alias tmux="TERM=screen-256color-bce tmux"
 export PATH="$HOME/.rbenv/bin:$PATH"
 eval "$(rbenv init -)"
+
+lhaste()
+{
+  if [ $# -eq 0 ]; then
+    content=$(cat)
+  else
+    content=$(cat $1)
+  fi
+
+  curl -X POST -s -d "$content" http://hastebin.peachtreebilling.local/documents | echo "http://hastebin.peachtreebilling.local/"`ruby -e "puts ARGF.read.to_s.match(/\{\"key\":\"(.+)\"\}/).captures.first"` | pbcopy
+}
