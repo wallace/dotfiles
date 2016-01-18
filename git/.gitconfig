@@ -21,7 +21,7 @@
   conflictstyle=diff3
 	summary = true
 [core]
-	excludesfile = /opt/boxen/config/git/gitignore
+	excludesfile = ~/.gitignore
 	autocrlf = input
 [apply]
 	whitespace = nowarn
@@ -49,11 +49,16 @@
   keepTemporaries = false
   trustExitCode = false
 [mergetool "gvim"]
-	cmd = mvim \"+Gdiff\" $MERGED
+	cmd = vim \"+Gdiff\" $MERGED
 [push]
 	default = simple
 [pull]
+  default = current
 	rebase = preserve
 
 [hub]
 protocol = https
+[rebase]
+	autostash = true
+[stash]
+	showPatch = true
