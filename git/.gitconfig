@@ -60,5 +60,6 @@
 protocol = https
 [rebase]
 	autostash = true
+	autosquash = true
 [stash]
 	showPatch = true
