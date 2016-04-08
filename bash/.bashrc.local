@@ -63,3 +63,5 @@ fi
 unset color_prompt force_color_prompt
 
 alias tmux="TERM=screen-256color-bce tmux"
+
+[ -f ~/.fzf.bash ] && source ~/.fzf.bash ]
