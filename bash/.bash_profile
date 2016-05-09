@@ -19,6 +19,7 @@ source ~/.git-completion.bash
 set -o vi
 
 alias ..='cd ..'
+alias gpom='git pull origin master'
 
 # history settings
 export HISTFILE=$HOME/.bash_history
@@ -85,6 +86,8 @@ alias irb='pry'
 
 # rails related
 alias be='bundle exec'
+alias bers='bundle exec rspec spec'
+alias beers='bers'
 
 # git related
 # alias git=hub
