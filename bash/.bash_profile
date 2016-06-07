@@ -20,6 +20,19 @@ set -o vi
 
 alias ..='cd ..'
 alias gpom='git pull origin master'
+alias gp='git push'
+alias wd='sd'
+alias gemb='gem build *gemspec'
+alias box='gem inabox *gem && rm *.gem'
+alias gembb='gemb && box'
+
+cm() {
+  if [[ $# > 0 ]]; then
+    git commit -m $@
+  else
+    git commit -v
+  fi
+}
 
 # history settings
 export HISTFILE=$HOME/.bash_history
@@ -103,12 +116,19 @@ alias gpo='git pull origin'
 alias gpro='git pull --rebase origin'
 alias gl='git log'
 
+# switching to neovim
+#alias v="nvim"
+#alias vi="nvim"
+#alias vim="nvim"
+#alias vu="nvim +BundleInstall +qall"
+#alias vrc="nvim ~/.vimrc"
+
 # Add auto completion for c
 alias c='git co'
 make-completion-wrapper _git _git_checkout_mine git checkout
 complete -o bashdefault -o default -o nospace -F _git_checkout_mine c
 
-export EDITOR=`which vim`
+export EDITOR=`which nvim`
 
 # Make less work with RAW ASCII colors
 # from http://blog.0x1fff.com/2009/11/linux-tip-color-enabled-pager-less.html
@@ -123,6 +143,7 @@ export LESS="-RSM~gIsw"
 # w - Highlight first line after PgDn
 
 alias tmux="TERM=screen-256color-bce tmux"
+alias v="nvim"
 export PATH="$HOME/.rbenv/bin:$PATH"
 eval "$(rbenv init -)"
 
@@ -136,3 +157,12 @@ lhaste()
 
   curl -X POST -s -d "$content" http://hastebin.peachtreebilling.local/documents | echo "http://hastebin.peachtreebilling.local/"`ruby -e "puts ARGF.read.to_s.match(/\{\"key\":\"(.+)\"\}/).captures.first"` | pbcopy
 }
+
+source ~/.bashrc.local
+
+# define the sd function
+source '/Users/jwallace/Documents/projects/sd/sd'
+
+# https://github.com/neovim/neovim/issues/2048#issuecomment-78045837
+[[ -f ~/.$TERM.ti ]] || infocmp $TERM | sed 's/kbs=^[hH]/kbs=\\177/' > ~/.$TERM.ti
+tic ~/.$TERM.ti
