@@ -163,6 +163,10 @@ source ~/.bashrc.local
 # define the sd function
 source '/Users/jwallace/Documents/projects/sd/sd'
 
+export FZF_DEFAULT_COMMAND='ag -g "" --hidden --ignore .git'
+export FZF_COMPLETION_TRIGGER=',,'
+
 # https://github.com/neovim/neovim/issues/2048#issuecomment-78045837
 [[ -f ~/.$TERM.ti ]] || infocmp $TERM | sed 's/kbs=^[hH]/kbs=\\177/' > ~/.$TERM.ti
 tic ~/.$TERM.ti
+
