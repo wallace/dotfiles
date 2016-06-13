@@ -182,3 +182,6 @@ export FZF_COMPLETION_TRIGGER=',,'
 [[ -f ~/.$TERM.ti ]] || infocmp $TERM | sed 's/kbs=^[hH]/kbs=\\177/' > ~/.$TERM.ti
 tic ~/.$TERM.ti
 
+# Base16 Shell
+BASE16_SHELL="$HOME/.config/base16-shell/base16-ocean.dark.sh"
+[[ -s $BASE16_SHELL ]] && source $BASE16_SHELL
