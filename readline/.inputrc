@@ -9,3 +9,4 @@ set show-all-if-ambiguous on
 
 # vi keys ALL the places
 set editing-mode vi
+set completion-ignore-case On
