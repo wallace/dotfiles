@@ -161,7 +161,19 @@ lhaste()
 source ~/.bashrc.local
 
 # define the sd function
-source '/Users/jwallace/Documents/projects/sd/sd'
+IMAC_SD_PATH='/Users/jwallace/Documents/projects/sd/sd'
+MBP_SD_PATH='/Users/jonathanwallace/Documents/projects/sd/sd'
+if [[ -f $IMAC_SD_PATH ]]; then
+  source $IMAC_SD_PATH
+  if [[ ! -h ~/bin/sd ]]; then
+    $(ln -s $IMAC_SD_PATH ~/bin/sd)
+  fi
+elif [[ -f $MBP_SD_PATH ]]; then
+  source $MBP_SD_PATH
+  if [[ ! -h ~/bin/sd ]]; then
+    $(ln -s $MBP_SD_PATH ~/bin/sd)
+  fi
+fi
 
 export FZF_DEFAULT_COMMAND='ag -g "" --hidden --ignore .git'
 export FZF_COMPLETION_TRIGGER=',,'
