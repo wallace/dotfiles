@@ -29,6 +29,7 @@
 	threads = 0
 [diff]
 	renamelimit = 0
+	compaction-heuristic = true
 [github]
 	user = wallace
 	;token = <token_here>
