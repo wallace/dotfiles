@@ -26,7 +26,7 @@ shopt -s histverify
 # Make space perform history expansion.
 #bindkey ' ' magic-space '
 
-export EDITOR=`which vim`
+export EDITOR=`which nvim`
 
 # Make less work with RAW ASCII colors
 # from http://blog.0x1fff.com/2009/11/linux-tip-color-enabled-pager-less.html
