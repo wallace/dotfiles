@@ -69,3 +69,9 @@ vnoremap K :m '<-2<CR>gv=gv
 
 " Make a mark, goes to the beginning of the file, aligns, and travels back to the mark.
 nnoremap <leader><tab> mtgg=G`t`
+
+" Ctrl-H to search for visually highlighted text
+" then %s//<replacement-string>
+" from http://stackoverflow.com/a/15934899
+" vnoremap <C-r> "hy:%s/<C-r>h//c<left><left>"
+vnoremap <c-h> y<ESC>/<c-r>"<CR>
