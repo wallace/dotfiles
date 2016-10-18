@@ -188,3 +188,5 @@ BASE16_SHELL="$HOME/.config/base16-shell/base16-ocean.dark.sh"
 
 # show colors in macOS
 export CLICOLOR=1
+
+source ~/bin/tmuxinator.bash
