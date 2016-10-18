@@ -5,6 +5,21 @@ See http://brandon.invergo.net/news/2012-05-26-using-gnu-stow-to-manage-your-dot
 
 ## Setup
 
+### Prerequisites
+
+    $ brew install stow rbenv readline neovim/neovim/neovim vim git tmux reattach-to-user-namespace fzf
+    $ stow base16-shell
+    $ stow bash
+    $ stow git
+    $ stow rbenv
+    $ stow readline
+    $ stow rspec
+    $ stow ruby_debugger
+    $ stow rubygems
+    $ stow scripts
+    $ stow tmux
+    $ stow vim
+
 ### sd
 
     # clone to Documents/projects/sd
