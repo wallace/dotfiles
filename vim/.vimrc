@@ -110,6 +110,7 @@ source ~/.vim/config/general_keys.vim
 source ~/.vim/config/general_settings.vim
 source ~/.vim/config/gist.vim
 source ~/.vim/config/gui.vim
+source ~/.vim/config/markdown.vim
 source ~/.vim/config/nerdcommenter.vim
 source ~/.vim/config/nerdtree.vim
 source ~/.vim/config/rails.vim
