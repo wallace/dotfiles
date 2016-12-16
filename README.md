@@ -10,6 +10,7 @@ See http://brandon.invergo.net/news/2012-05-26-using-gnu-stow-to-manage-your-dot
     $ brew install stow rbenv readline neovim/neovim/neovim vim git tmux reattach-to-user-namespace fzf
     $ stow base16-shell
     $ stow bash
+    $ stow bash_it
     $ stow git
     $ stow rbenv
     $ stow readline
