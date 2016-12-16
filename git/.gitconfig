@@ -58,7 +58,7 @@
 	rebase = preserve
 
 [hub]
-protocol = https
+protocol = ssh
 [rebase]
 	autostash = true
 	autosquash = true
