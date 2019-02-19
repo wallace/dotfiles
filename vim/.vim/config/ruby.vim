@@ -20,7 +20,7 @@ fun LoadRubyKeybindings()
    " setlocal foldlevel=2
 endfun
 
-let g:rspec_command = 'call VimuxRunCommand("bundle exec rspec {spec}\n")'
+let g:rspec_command = 'call VimuxRunCommand("bin/rspec {spec}\n")'
 map <Leader>rr :call RunNearestSpec()<CR>
 map <Leader>rf :call RunCurrentSpecFile()<CR>
 map <Leader>rl :call RunLastSpec()<CR>
