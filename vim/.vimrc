@@ -17,6 +17,10 @@ call vundle#begin()
 Plugin 'VundleVim/Vundle.vim'
 " 5) Include all of the bundles that we want to make use of.
 " All of these references are to github repositories unless otherwise noted.
+Plugin 'vim-scripts/AnsiEsc.vim'
+Plugin 'hashrocket/slurper.vim'
+Plugin 'roxma/vim-hug-neovim-rpc'
+Plugin 'roxma/nvim-yarp'
 Plugin 'vim-scripts/ack.vim'
 Plugin 'rking/ag.vim'
 Plugin 'Townk/vim-autoclose'
@@ -58,6 +62,7 @@ Plugin 'kien/rainbow_parentheses.vim'
 Plugin 'thoughtbot/vim-rspec'
 Plugin 'danro/rename.vim'
 Plugin 'tpope/vim-repeat'
+Plugin 'tpope/vim-rhubarb'
 Plugin 'vim-ruby/vim-ruby'
 Plugin 'ecomba/vim-ruby-refactoring'
 Plugin 'tpope/vim-salve'
@@ -135,3 +140,5 @@ let g:deoplete#enable_at_startup = 1
 set splitright
 nnoremap <CR> :noh<CR><CR>
 nnoremap <leader>. :vs<CR>:OpenAlternate<CR>
+
+let g:python3_host_prog = '/Users/jonathanwallace/.pyenv/versions/neovim3/bin/python'
