@@ -25,6 +25,7 @@ alias wd='sd'
 alias gemb='gem build *gemspec'
 alias box='gem inabox *gem && rm *.gem'
 alias gembb='gemb && box'
+alias git=hub
 
 cm() {
   if [[ $# > 0 ]]; then
@@ -115,6 +116,8 @@ alias ci='git ci'
 alias gpo='git pull origin'
 alias gpro='git pull --rebase origin'
 alias gl='git log'
+# http://stevenharman.net/git-clean-delete-already-merged-branches
+alias prune='git fetch --prune ; and git branch --merged | grep -v "*" | xargs -n 1 git branch -d'
 
 # switching to neovim
 #alias v="nvim"
@@ -232,3 +235,10 @@ export SCM_CHECK=true
 
 # Load Bash It
 source $BASH_IT/bash_it.sh
+
+export PATH="/Users/jonathanwallace/.pyenv/bin:$PATH"
+eval "$(pyenv init -)"
+eval "$(pyenv virtualenv-init -)"
+export PATH="/usr/local/opt/mysql@5.7/bin:$PATH"
+eval "$(nodenv init -)"
+export PATH="/usr/local/opt/postgresql@10/bin:$PATH"
