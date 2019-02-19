@@ -8,13 +8,13 @@
 	interactive = auto
 	ui = always
 [alias]
-	ds = diff --staged
+	ds = diff --staged --color-moved
 	st = status
 	ci = commit -v
 	co = checkout
 	br = branch
 	ctags = !.git/hooks/ctags
-	lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative
+	lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative --color-moved
   pr = !sh -c 'git log $0..next-release --ancestry-path --merges --oneline | tail -1'
 [merge]
 	tool = p4merge
