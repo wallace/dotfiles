@@ -1,4 +1,5 @@
-set rtp+=~/.fzf
+" set rtp+=~/.fzf
+set rtp+=/usr/local/opt/fzf
 
 " Commits for current file
 " TODO: this is not working
