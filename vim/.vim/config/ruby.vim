@@ -25,3 +25,6 @@ map <Leader>rr :call RunNearestSpec()<CR>
 map <Leader>rf :call RunCurrentSpecFile()<CR>
 map <Leader>rl :call RunLastSpec()<CR>
 map <Leader>ra :call RunAllSpecs()<CR>
+
+map <Leader>tu :call VimuxRunCommand("be m " . expand("%") . ":" . line("."))<CR>
+map <Leader>tua :call VimuxRunCommand("be m " . expand("%"))<CR>
