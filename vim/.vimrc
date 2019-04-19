@@ -28,7 +28,6 @@ Plugin 'ctrlpvim/ctrlp.vim'
 Plugin 'Lokaltog/vim-easymotion'
 Plugin 'tpope/vim-endwise'
 Plugin 'tpope/vim-fugitive'
-Plugin 'shumphrey/fugitive-gitlab.vim'
 Plugin 'junegunn/fzf'
 Plugin 'junegunn/fzf.vim'
 Plugin 'mattn/gist-vim'
@@ -92,7 +91,6 @@ source ~/.vim/config/ctrlp.vim
 source ~/.vim/config/display.vim
 source ~/.vim/config/editing.vim
 source ~/.vim/config/fugitive.vim
-source ~/.vim/config/fugitive_gitlab.vim
 source ~/.vim/config/fzf.vim
 source ~/.vim/config/general_keys.vim
 source ~/.vim/config/general_settings.vim
