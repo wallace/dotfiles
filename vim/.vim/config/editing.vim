@@ -81,3 +81,6 @@ vnoremap <c-h> y<ESC>/<c-r>"<CR>
 " from http://stackoverflow.com/a/15934899
 " vnoremap <C-r> "hy:%s/<C-r>h//c<left><left>"
 vnoremap <c-a> y<ESC>:Ag<SPACE><c-r>"
+
+" Removes trailing whitespace in the current file
+map <Leader>sx :%s/\s\+$//<CR>
