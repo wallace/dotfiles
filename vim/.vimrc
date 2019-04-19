@@ -101,7 +101,6 @@ let g:gitgutter_eager = 0
 source ~/.vim/config/SudoW.vim
 source ~/.vim/config/ag.vim
 source ~/.vim/config/autoclose.vim
-source ~/.vim/config/bufexplorer.vim
 source ~/.vim/config/clojure.vim
 source ~/.vim/config/colorscheme.vim
 source ~/.vim/config/completion.vim
