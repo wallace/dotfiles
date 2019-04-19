@@ -61,7 +61,6 @@ Plugin 'tpope/vim-unimpaired'
 Plugin 'benmills/vimux'
 Plugin 'skalnik/vim-vroom'
 Plugin 'mattn/webapi-vim'
-Plugin 'neomake/neomake'
 Plugin 'Shougo/deoplete.nvim'
 Plugin 'mbbill/undotree'
 
@@ -101,7 +100,6 @@ source ~/.vim/config/tabular.vim
 source ~/.vim/config/tags.vim
 source ~/.vim/config/tempfiles.vim
 source ~/.vim/config/tmux_navigator.vim
-source ~/.vim/config/neomake.vim
 source ~/.vim/config/undotree.vim
 "
 "" <cr> should not only clear highlighted search, but flash the current
