@@ -150,17 +150,6 @@ alias v="nvim"
 export PATH="$HOME/.rbenv/bin:$PATH"
 eval "$(rbenv init -)"
 
-lhaste()
-{
-  if [ $# -eq 0 ]; then
-    content=$(cat)
-  else
-    content=$(cat $1)
-  fi
-
-  curl -X POST -s -d "$content" http://hastebin.peachtreebilling.local/documents | echo "http://hastebin.peachtreebilling.local/"`ruby -e "puts ARGF.read.to_s.match(/\{\"key\":\"(.+)\"\}/).captures.first"` | pbcopy
-}
-
 source ~/.bashrc.local
 
 # define the sd function
@@ -196,6 +185,9 @@ source ~/bin/tmuxinator.bash
 
 # Path to the bash it configuration
 export BASH_IT="/Users/jonathanwallace/.bash_it"
+
+
+export SCM_GIT_SHOW_MINIMAL_INFO=true
 
 # Lock and Load a custom theme file
 # location /.bash_it/themes/
