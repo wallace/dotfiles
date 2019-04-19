@@ -40,8 +40,6 @@ Plugin 'itchyny/lightline.vim'
 Plugin 'wallace/vim-matchit'
 Plugin 'scrooloose/nerdcommenter'
 Plugin 'scrooloose/nerdtree'
-Plugin 'cyphactor/vim-open-alternate'
-Plugin 'puppetlabs/puppet-syntax-vim'
 Plugin 'tpope/vim-rake'
 Plugin 'tpope/vim-rails'
 Plugin 'thoughtbot/vim-rspec'
@@ -51,16 +49,12 @@ Plugin 'tpope/vim-rhubarb'
 Plugin 'vim-ruby/vim-ruby'
 Plugin 'ecomba/vim-ruby-refactoring'
 Plugin 'slim-template/vim-slim'
-Plugin 'jpalardy/vim-slime'
-Plugin 'adamlowe/vim-slurper'
 Plugin 'wallace/snipmate.vim'
-Plugin 'altercation/vim-colors-solarized'
 Plugin 'ervandew/supertab'
 Plugin 'tpope/vim-surround'
 Plugin 'godlygeek/tabular'
 Plugin 'kana/vim-textobj-user'
 Plugin 'nelstrom/vim-textobj-rubyblock'
-Plugin 'majutsushi/tagbar'
 Plugin 'christoomey/vim-tmux-navigator'
 Plugin 'duwanis/tomdoc.vim'
 Plugin 'tpope/vim-unimpaired'
@@ -100,10 +94,8 @@ source ~/.vim/config/markdown.vim
 source ~/.vim/config/nerdcommenter.vim
 source ~/.vim/config/nerdtree.vim
 source ~/.vim/config/rails.vim
-source ~/.vim/config/rainbow_parentheses.vim
 source ~/.vim/config/ruby.vim
 source ~/.vim/config/search.vim
-source ~/.vim/config/slime.vim
 source ~/.vim/config/spellcheck.vim
 source ~/.vim/config/tabular.vim
 source ~/.vim/config/tags.vim
