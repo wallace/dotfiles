@@ -18,4 +18,4 @@ map <Leader>gb :Gblame<CR>
 map <Leader>gp :Gpush<CR>
 
 " Git pull
-map <Leader>gl :Gpull<CR>
+map <Leader>gll :Gpull<CR>
