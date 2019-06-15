@@ -18,8 +18,8 @@ autocmd VimEnter,WinEnter,BufWinEnter * setlocal cursorline
 autocmd WinLeave * setlocal nocursorline
 
 " highlight the current column in current window; may slow down redrawing for long lines or large files
-autocmd VimEnter,WinEnter,BufWinEnter * setlocal cursorcolumn
-autocmd WinLeave * setlocal nocursorcolumn
+" autocmd VimEnter,WinEnter,BufWinEnter * setlocal cursorcolumn
+" autocmd WinLeave * setlocal nocursorcolumn
 
 " highlight columns over 80 characters in length
 " TODO: this doesn't seem to work?

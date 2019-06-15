@@ -6,5 +6,5 @@ syntax enable
 set background=dark
 
 " Use the solarized colorscheme.
-"colorscheme solarized
+" colorscheme base16-solarized-light
 colorscheme base16-ocean
