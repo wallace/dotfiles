@@ -2,71 +2,57 @@
 " in this configuration; I prefer to use <Space> for <Leader>.
 let mapleader="\<Space>"
 
-"  """ Vundle settings.
-" Make use of Vundle to handle our packages with five easy steps:
-" 1) Set config settings required for Vundle to startup.
-set nocompatible
-filetype off
-" 2) Add Vundle to the runtime path.
-set rtp+=~/.vim/bundle/Vundle.vim/
-" 3) Initialize Vundle.
-call vundle#begin()
-" 4) Let Vundle manage Vundle.
-Plugin 'VundleVim/Vundle.vim'
-" 5) Include all of the bundles that we want to make use of.
-" All of these references are to github repositories unless otherwise noted.
-Plugin 'vim-scripts/AnsiEsc.vim'
-Plugin 'roxma/vim-hug-neovim-rpc'
-Plugin 'roxma/nvim-yarp'
-Plugin 'rking/ag.vim'
-Plugin 'Townk/vim-autoclose'
-Plugin 'chriskempson/base16-vim'
-Plugin 'tpope/vim-bundler' " path and tags includes gems from Bundle file
-Plugin 'kchmck/vim-coffee-script'
-Plugin 'chrisbra/csv.vim'
-Plugin 'ctrlpvim/ctrlp.vim'
-Plugin 'Lokaltog/vim-easymotion'
-Plugin 'tpope/vim-endwise'
-Plugin 'tpope/vim-fugitive'
-Plugin 'junegunn/fzf'
-Plugin 'junegunn/fzf.vim'
-Plugin 'mattn/gist-vim'
-Plugin 'airblade/vim-gitgutter'
-Plugin 'tpope/vim-haml'
-Plugin 'pangloss/vim-javascript'
-Plugin 'othree/javascript-libraries-syntax.vim'
-Plugin 'nathanaelkane/vim-indent-guides'
-Plugin 'itchyny/lightline.vim'
-Plugin 'wallace/vim-matchit'
-Plugin 'scrooloose/nerdcommenter'
-Plugin 'scrooloose/nerdtree'
-Plugin 'tpope/vim-rake'
-Plugin 'tpope/vim-rails'
-Plugin 'thoughtbot/vim-rspec'
-Plugin 'danro/rename.vim'
-Plugin 'tpope/vim-repeat'
-Plugin 'tpope/vim-rhubarb'
-Plugin 'vim-ruby/vim-ruby'
-Plugin 'ecomba/vim-ruby-refactoring'
-Plugin 'slim-template/vim-slim'
-Plugin 'wallace/snipmate.vim'
-Plugin 'ervandew/supertab'
-Plugin 'tpope/vim-surround'
-Plugin 'godlygeek/tabular'
-Plugin 'kana/vim-textobj-user'
-Plugin 'nelstrom/vim-textobj-rubyblock'
-Plugin 'christoomey/vim-tmux-navigator'
-Plugin 'duwanis/tomdoc.vim'
-Plugin 'tpope/vim-unimpaired'
-Plugin 'benmills/vimux'
-Plugin 'skalnik/vim-vroom'
-Plugin 'mattn/webapi-vim'
-Plugin 'Shougo/deoplete.nvim'
-Plugin 'mbbill/undotree'
+call plug#begin('~/.vim/plugged')
 
-call vundle#end()         "required
-filetype plugin indent on "required
-"
+Plug 'vim-scripts/AnsiEsc.vim'
+Plug 'rking/ag.vim'
+Plug 'Townk/vim-autoclose'
+Plug 'chriskempson/base16-vim'
+Plug 'tpope/vim-bundler' " path and tags includes gems from Bundle file
+Plug 'kchmck/vim-coffee-script'
+Plug 'chrisbra/csv.vim'
+Plug 'ctrlpvim/ctrlp.vim'
+Plug 'Lokaltog/vim-easymotion'
+Plug 'tpope/vim-endwise'
+Plug 'tpope/vim-fugitive'
+Plug 'junegunn/fzf'
+Plug 'junegunn/fzf.vim'
+Plug 'mattn/gist-vim'
+Plug 'airblade/vim-gitgutter'
+Plug 'tpope/vim-haml'
+Plug 'pangloss/vim-javascript'
+Plug 'othree/javascript-libraries-syntax.vim'
+Plug 'nathanaelkane/vim-indent-guides'
+Plug 'itchyny/lightline.vim'
+Plug 'wallace/vim-matchit'
+Plug 'scrooloose/nerdcommenter'
+Plug 'scrooloose/nerdtree'
+Plug 'tpope/vim-rake'
+Plug 'tpope/vim-rails'
+Plug 'thoughtbot/vim-rspec'
+Plug 'danro/rename.vim'
+Plug 'tpope/vim-repeat'
+Plug 'tpope/vim-rhubarb'
+Plug 'vim-ruby/vim-ruby'
+Plug 'ecomba/vim-ruby-refactoring'
+Plug 'slim-template/vim-slim'
+Plug 'wallace/snipmate.vim'
+Plug 'ervandew/supertab'
+Plug 'tpope/vim-surround'
+Plug 'godlygeek/tabular'
+Plug 'kana/vim-textobj-user'
+Plug 'nelstrom/vim-textobj-rubyblock'
+Plug 'christoomey/vim-tmux-navigator'
+Plug 'duwanis/tomdoc.vim'
+Plug 'tpope/vim-unimpaired'
+Plug 'benmills/vimux'
+Plug 'skalnik/vim-vroom'
+Plug 'mattn/webapi-vim'
+Plug 'mbbill/undotree'
+Plug 'neoclide/coc.nvim', {'branch': 'release'}
+
+call plug#end()
+
 """" Custom Configs include.
 "" All custom config settings are stored in the .vim/config folder to
 "" differentiate them from 3rd-party libraries.
@@ -106,7 +92,6 @@ source ~/.vim/config/undotree.vim
 "" cursor location.
 "" causes problems with ack
 "" :nnoremap <CR> :nohlsearch<CR>:set cul cuc<cr>:sleep 50m<cr>:set nocul nocuc<cr>/<BS>
-let g:deoplete#enable_at_startup = 1
 
 set splitright
 nnoremap <CR> :noh<CR><CR>
