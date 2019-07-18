@@ -184,7 +184,7 @@ export CLICOLOR=1
 source ~/bin/tmuxinator.bash
 
 # Path to the bash it configuration
-export BASH_IT="/Users/$HOME/.bash_it"
+export BASH_IT="$HOME/.bash_it"
 
 
 export SCM_GIT_SHOW_MINIMAL_INFO=true
