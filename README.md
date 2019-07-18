@@ -8,6 +8,7 @@ See http://brandon.invergo.net/news/2012-05-26-using-gnu-stow-to-manage-your-dot
 ### Prerequisites
 
     $ brew install stow rbenv nodenv readline neovim/neovim/neovim vim git tmux reattach-to-user-namespace fzf hub ag
+    $ brew install --HEAD universal-ctags/universal-ctags/universal-ctags
     $ stow base16-shell
     $ stow bash
     $ git clone --depth=1 https://github.com/Bash-it/bash-it.git ~/dotfiles/bash_it/.bash_it
@@ -26,6 +27,7 @@ See http://brandon.invergo.net/news/2012-05-26-using-gnu-stow-to-manage-your-dot
     $ curl -fLo ~/.local/share/nvim/site/autoload/plug.vim --create-dirs \
       https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
     $ # run PlugInstall from within nvim
+    $ mkdir ~/.vim-tmp # add vim backup directory to prevent errors like https://stackoverflow.com/questions/8428210/cannot-create-backup-fileadd-to-overwrite
 
 ### sd
 
