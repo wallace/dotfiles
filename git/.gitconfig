@@ -66,3 +66,5 @@ protocol = ssh
 	showPatch = true
 [mergetool "p4mergetool"]
 	cmd = /Applications/p4merge.app/Contents/Resources/launchp4merge $PWD/$BASE $PWD/$REMOTE $PWD/$LOCAL $PWD/$MERGED
+[credential]
+	helper = osxkeychain
