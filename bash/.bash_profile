@@ -238,4 +238,9 @@ export PATH="/usr/local/opt/postgresql@10/bin:$PATH"
 # Setting PATH for Python 3.6
 # The original version is saved in .bash_profile.pysave
 PATH="/Library/Frameworks/Python.framework/Versions/3.6/bin:${PATH}"
+
+# Set up go for using protobufs and generating the handlers
+GOPATH="$HOME/go"
+PATH="${PATH}:${GOPATH}/bin"
+
 export PATH
