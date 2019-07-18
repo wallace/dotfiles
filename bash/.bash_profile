@@ -153,8 +153,8 @@ eval "$(rbenv init -)"
 source ~/.bashrc.local
 
 # define the sd function
-IMAC_SD_PATH='/Users/jwallace/Documents/projects/sd/sd'
-MBP_SD_PATH='/Users/jonathanwallace/Documents/projects/sd/sd'
+IMAC_SD_PATH="$HOME/Documents/projects/sd/sd"
+MBP_SD_PATH="$HOME/Documents/projects/sd/sd"
 if [[ -f $IMAC_SD_PATH ]]; then
   source $IMAC_SD_PATH
   if [[ ! -h ~/bin/sd ]]; then
@@ -184,7 +184,7 @@ export CLICOLOR=1
 source ~/bin/tmuxinator.bash
 
 # Path to the bash it configuration
-export BASH_IT="/Users/jonathanwallace/.bash_it"
+export BASH_IT="/Users/$HOME/.bash_it"
 
 
 export SCM_GIT_SHOW_MINIMAL_INFO=true
@@ -228,7 +228,7 @@ export SCM_CHECK=true
 # Load Bash It
 source $BASH_IT/bash_it.sh
 
-export PATH="/Users/jonathanwallace/.pyenv/bin:$PATH"
+export PATH="$HOME/.pyenv/bin:$PATH"
 eval "$(pyenv init -)"
 eval "$(pyenv virtualenv-init -)"
 export PATH="/usr/local/opt/mysql@5.7/bin:$PATH"
