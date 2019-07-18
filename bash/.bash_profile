@@ -234,3 +234,8 @@ eval "$(pyenv virtualenv-init -)"
 export PATH="/usr/local/opt/mysql@5.7/bin:$PATH"
 eval "$(nodenv init -)"
 export PATH="/usr/local/opt/postgresql@10/bin:$PATH"
+
+# Setting PATH for Python 3.6
+# The original version is saved in .bash_profile.pysave
+PATH="/Library/Frameworks/Python.framework/Versions/3.6/bin:${PATH}"
+export PATH
