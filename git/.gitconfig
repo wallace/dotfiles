@@ -55,7 +55,7 @@
 	default = simple
 [pull]
   default = current
-	rebase = preserve
+	rebase = merges
 
 [hub]
 protocol = ssh
