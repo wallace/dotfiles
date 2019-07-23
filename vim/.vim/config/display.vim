@@ -4,7 +4,7 @@
 
 set laststatus=2   " always display a status line
 set number         " show line numbers
-set relativenumber " use relative line numbers
+" set relativenumber " use relative line numbers
 set ruler          " display coordinates in status bar
 set showcmd        " display unfinished commands
 set showmatch      " show matching bracket (briefly jump)
