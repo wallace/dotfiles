@@ -21,19 +21,7 @@ set -o vi
 alias ..='cd ..'
 alias gpom='git pull origin master'
 alias gp='git push'
-alias wd='sd'
-alias gemb='gem build *gemspec'
-alias box='gem inabox *gem && rm *.gem'
-alias gembb='gemb && box'
 alias git=hub
-
-cm() {
-  if [[ $# > 0 ]]; then
-    git commit -m $@
-  else
-    git commit -v
-  fi
-}
 
 # history settings
 export HISTFILE=$HOME/.bash_history
@@ -151,21 +139,6 @@ export PATH="$HOME/.rbenv/bin:$PATH"
 eval "$(rbenv init -)"
 
 source ~/.bashrc.local
-
-# define the sd function
-IMAC_SD_PATH="$HOME/Documents/projects/sd/sd"
-MBP_SD_PATH="$HOME/Documents/projects/sd/sd"
-if [[ -f $IMAC_SD_PATH ]]; then
-  source $IMAC_SD_PATH
-  if [[ ! -h ~/bin/sd ]]; then
-    $(ln -s $IMAC_SD_PATH ~/bin/sd)
-  fi
-elif [[ -f $MBP_SD_PATH ]]; then
-  source $MBP_SD_PATH
-  if [[ ! -h ~/bin/sd ]]; then
-    $(ln -s $MBP_SD_PATH ~/bin/sd)
-  fi
-fi
 
 export FZF_DEFAULT_COMMAND='ag -g "" --hidden --ignore .git'
 export FZF_COMPLETION_TRIGGER=',,'
