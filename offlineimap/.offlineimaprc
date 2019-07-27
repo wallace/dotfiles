@@ -657,7 +657,7 @@ nametrans = lambda folder: {'drafts':  '[Gmail]/Drafts',
 max-connections = 1
 type = Gmail
 remoteuser = jonathan.wallace@gmail.com
-remotepasseval = 'passwordhere'
+remotepasseval = get_keychain_pass(account="jonathan.wallace@gmail.com", server="imap.gmail.com")
 sslcacertfile=/usr/local/etc/openssl/cert.pem
 realdelete=no
 nametrans = lambda folder: {'[Gmail]/Drafts':    'drafts',
