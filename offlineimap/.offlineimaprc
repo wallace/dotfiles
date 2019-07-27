@@ -138,7 +138,7 @@ ui = TTYUI
 #
 # Tilde and environment variable expansions will be performed.
 #
-#pythonfile = ~/.offlineimap.py
+pythonfile = ~/.offlineimap.py
 
 
 # This option is in the [general] section.
@@ -169,14 +169,14 @@ ui = TTYUI
 # SQLite honors this option since v7.0.8+. However, those SQLite improvements
 # are still EXPERIMENTAL.
 #
-#fsync = true
+fsync = false
 
 
 ##################################################
 # Mailbox name recorder
 ##################################################
 
-[mbnames]
+#[mbnames]
 
 # Offlineimap can record your mailbox names in a format you specify.
 # You can define the header, each mailbox item, the separator,
@@ -263,8 +263,8 @@ ui = TTYUI
 # These settings specify the two folders that you will be syncing.
 # You'll need to have a "Repository ..." section for each one.
 
-localrepository = LocalExample
-remoterepository = RemoteExample
+localrepository = JonathanWallace-Local
+remoterepository = JonathanWallace-Remote
 
 
 ########## Advanced settings
@@ -503,7 +503,7 @@ remoterepository = RemoteExample
 #authproxy = SOCKS5:IP:9999
 
 
-[Repository LocalExample]
+[Repository JonathanWallace-Local]
 
 # Each repository requires a "type" declaration. The types supported for
 # local repositories are Maildir, GmailMaildir and IMAP.
@@ -517,7 +517,7 @@ type = Maildir
 # to maildirs created under this path.  Offlineimap will create the
 # maildirs for you as needed.
 #
-localfolders = ~/Test
+localfolders = ~/.mail/jonathanwallace-gmail.com
 
 
 # This option stands in the [Repository LocalExample] section.
@@ -633,7 +633,14 @@ localfolders = ~/Test
 #customflag_c = NonJunk
 #customflag_d = ToDo
 
-[Repository GmailLocalExample]
+nametrans = lambda folder: {'drafts':  '[Gmail]/Drafts',
+                            'sent':    '[Gmail]/Sent Mail',
+                            'flagged': '[Gmail]/Starred',
+                            'trash':   '[Gmail]/Trash',
+                            'archive': '[Gmail]/All Mail',
+                            }.get(folder, folder)
+
+[Repository JonathanWallace-Remote]
 
 # This type of repository enables syncing of Gmail. All Maildir
 # configuration settings are also valid here but the utime_from_header.
@@ -646,14 +653,27 @@ localfolders = ~/Test
 # the contents of all individual messages for labels and this may take
 # a while.
 #
-type = GmailMaildir
+
+max-connections = 1
+type = Gmail
+remoteuser = jonathan.wallace@gmail.com
+remotepasseval = 'passwordhere'
+sslcacertfile=/usr/local/etc/openssl/cert.pem
+realdelete=no
+nametrans = lambda folder: {'[Gmail]/Drafts':    'drafts',
+                            '[Gmail]/Sent Mail': 'sent',
+                            '[Gmail]/Starred':   'flagged',
+                            '[Gmail]/Trash':     'trash',
+                            '[Gmail]/All Mail':  'archive',
+                            }.get(folder, folder)
 
 
-[Repository RemoteExample]
+
+#[Repository RemoteExample]
 
 # The remote repository.  We only support IMAP or Gmail here.
 #
-type = IMAP
+#type = IMAP
 
 
 # This option stands in the [Repository RemoteExample] section.
@@ -692,7 +712,7 @@ type = IMAP
 #
 # Specify the remote hostname.
 #
-remotehost = examplehost
+#remotehost = examplehost
 
 
 # This option stands in the [Repository RemoteExample] section.
@@ -860,7 +880,7 @@ remotehost = examplehost
 #
 # Specify the remote user name.
 #
-remoteuser = username
+#remoteuser = username
 
 
 # This option stands in the [Repository RemoteExample] section.
@@ -1384,7 +1404,7 @@ remoteuser = username
 #copy_ignore_eval = lambda foldername: {'INBOX': [2, 3, 4]}.get(foldername)
 
 
-[Repository GmailExample]
+#[Repository GmailExample]
 
 # A repository using Gmail's IMAP interface.
 #
@@ -1413,14 +1433,14 @@ remoteuser = username
 # Side note: Gmail will keep the deleted emails in "Gmail\All Mail" unless you
 # defined it differently in your online settings.
 #
-type = Gmail
+#type = Gmail
 
 
 # This option stands in the [Repository GmailExample] section.
 #
 # Specify the Gmail user name. This is the only mandatory parameter.
 #
-remoteuser = username@gmail.com
+#remoteuser = username@gmail.com
 
 
 # This option stands in the [Repository GmailExample] section.
