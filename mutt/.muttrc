@@ -22,6 +22,9 @@ set beep_new             # bell on new mails
 set pipe_decode          # strip headers and eval mimes when piping
 set thorough_search      # strip headers and eval mimes before searching
 
+# Performance Tuning
+folder-hook . 'set read_inc=1000'
+
 # Sidebar --------------------------------------
 set sidebar_visible = yes
 set sidebar_format = "%B%?F? [%F]?%* %?N?%N/?%S"

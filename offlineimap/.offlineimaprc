@@ -265,7 +265,8 @@ fsync = false
 
 localrepository = JonathanWallace-Local
 remoterepository = JonathanWallace-Remote
-
+postsynchook = notmuch new
+#synclabels = yes
 
 ########## Advanced settings
 
@@ -654,7 +655,7 @@ nametrans = lambda folder: {'drafts':  '[Gmail]/Drafts',
 # a while.
 #
 
-max-connections = 1
+maxconnections = 4
 type = Gmail
 remoteuser = jonathan.wallace@gmail.com
 remotepasseval = get_keychain_pass(account="jonathan.wallace@gmail.com", server="imap.gmail.com")
@@ -666,8 +667,9 @@ nametrans = lambda folder: {'[Gmail]/Drafts':    'drafts',
                             '[Gmail]/Trash':     'trash',
                             '[Gmail]/All Mail':  'archive',
                             }.get(folder, folder)
-
-
+folderfilter = lambda folder: folder not in ['[Gmail]/Trash',
+                                             '[Gmail]/Spam',
+                                             ]
 
 #[Repository RemoteExample]
 
