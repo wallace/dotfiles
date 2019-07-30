@@ -132,6 +132,10 @@ set forward_quote                    # include message in forwards
 set editor = "vim"        # Use terminal Vim to compose email.
 
 
+set from      = "jonathan.wallace@gmail.com"
+set sendmail  = "/usr/local/bin/msmtp -a jonathanwallace"
+set sendmail_wait = 0
+unset record
 
 # Other special folders.
 #set mbox      = "+jonathanwallace-gmail.com/archive"

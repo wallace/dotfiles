@@ -8,7 +8,7 @@ See http://brandon.invergo.net/news/2012-05-26-using-gnu-stow-to-manage-your-dot
 ### Prerequisites
 
     $ brew install stow rbenv nodenv readline neovim/neovim/neovim vim git tmux reattach-to-user-namespace fzf hub ag
-    $ brew install neomutt urlview notmuch offlineimap
+    $ brew install neomutt urlview notmuch offlineimap msmtp
     $ brew install --HEAD universal-ctags/universal-ctags/universal-ctags
     $ stow base16-shell
     $ stow bash
