@@ -7,9 +7,10 @@ See http://brandon.invergo.net/news/2012-05-26-using-gnu-stow-to-manage-your-dot
 
 ### Prerequisites
 
-    $ brew install stow rbenv nodenv readline neovim/neovim/neovim vim git tmux reattach-to-user-namespace fzf hub ag
+    $ brew install stow rbenv nodenv readline neovim/neovim/neovim vim git tmux reattach-to-user-namespace fzf hub ag bash-completion
     $ brew install neomutt urlview notmuch offlineimap msmtp
     $ brew install --HEAD universal-ctags/universal-ctags/universal-ctags
+    $ sudo curl -L https://raw.githubusercontent.com/docker/compose/1.24.1/contrib/completion/bash/docker-compose -o /usr/local/etc/bash_completion.d/docker-compose
     $ stow base16-shell
     $ stow bash
     $ git clone --depth=1 https://github.com/Bash-it/bash-it.git ~/dotfiles/bash_it/.bash_it

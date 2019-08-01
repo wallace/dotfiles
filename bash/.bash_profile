@@ -40,9 +40,9 @@ shopt -s histverify
 # Make space perform history expansion.
 #bindkey ' ' magic-space '
 
-#if [ -f `brew --prefix`/etc/bash_completion ]; then
-#  . `brew --prefix`/etc/bash_completion
-#fi
+if [ -f `brew --prefix`/etc/bash_completion ]; then
+  . `brew --prefix`/etc/bash_completion
+fi
 
 # From http://stackoverflow.com/a/2078422/91029
 # Author.: Ole J
