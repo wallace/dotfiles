@@ -5,17 +5,14 @@ let mapleader="\<Space>"
 call plug#begin('~/.vim/plugged')
 
 Plug 'vim-scripts/AnsiEsc.vim'
-Plug 'rking/ag.vim'
 Plug 'Townk/vim-autoclose'
 Plug 'chriskempson/base16-vim'
 Plug 'tpope/vim-bundler' " path and tags includes gems from Bundle file
 Plug 'kchmck/vim-coffee-script'
 Plug 'chrisbra/csv.vim'
-Plug 'ctrlpvim/ctrlp.vim'
 Plug 'Lokaltog/vim-easymotion'
 Plug 'tpope/vim-endwise'
 Plug 'tpope/vim-fugitive'
-Plug 'junegunn/fzf'
 Plug 'junegunn/fzf.vim'
 Plug 'mattn/gist-vim'
 Plug 'airblade/vim-gitgutter'
@@ -35,6 +32,7 @@ Plug 'tpope/vim-repeat'
 Plug 'tpope/vim-rhubarb'
 Plug 'vim-ruby/vim-ruby'
 Plug 'ecomba/vim-ruby-refactoring'
+Plug 'jremmen/vim-ripgrep'
 Plug 'slim-template/vim-slim'
 Plug 'wallace/snipmate.vim'
 Plug 'ervandew/supertab'
@@ -61,12 +59,10 @@ let g:gitgutter_realtime = 0
 let g:gitgutter_eager = 0
 
 source ~/.vim/config/SudoW.vim
-source ~/.vim/config/ag.vim
 source ~/.vim/config/autoclose.vim
 source ~/.vim/config/clojure.vim
 source ~/.vim/config/colorscheme.vim
 source ~/.vim/config/completion.vim
-source ~/.vim/config/ctrlp.vim
 source ~/.vim/config/display.vim
 source ~/.vim/config/editing.vim
 source ~/.vim/config/fugitive.vim
@@ -79,6 +75,7 @@ source ~/.vim/config/markdown.vim
 source ~/.vim/config/nerdcommenter.vim
 source ~/.vim/config/nerdtree.vim
 source ~/.vim/config/rails.vim
+source ~/.vim/config/ripgrep.vim
 source ~/.vim/config/ruby.vim
 source ~/.vim/config/search.vim
 source ~/.vim/config/spellcheck.vim

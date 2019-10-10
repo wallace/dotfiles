@@ -13,7 +13,7 @@ map <Leader>rr :R<CR>
 map <Leader>rc :Rscript<CR>
 
 "<Leader>rg prompts the user to run script/generate.
-map <Leader>rg :Rgenerate<SPACE>
+" map <Leader>rg :Rgenerate<SPACE> -- conflicts with ripgrep
 
 "<Leader>rs runs/restarts the Rails server.
 map <Leader>rs :Rserver!<CR>

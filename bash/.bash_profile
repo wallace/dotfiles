@@ -140,7 +140,12 @@ eval "$(rbenv init -)"
 
 source ~/.bashrc.local
 
-export FZF_DEFAULT_COMMAND='ag -g "" --hidden --ignore .git'
+# --files: List files that would be searched but do not search
+# --no-ignore: Do not respect .gitignore, etc...
+# --hidden: Search hidden files and folders
+# --follow: Follow symlinks
+# --glob: Additional conditions for search (in this case ignore everything in the .git/ folder)
+export FZF_DEFAULT_COMMAND='rg --files --no-ignore --hidden --follow --glob "!.git/*"'
 export FZF_COMPLETION_TRIGGER=',,'
 
 # https://github.com/neovim/neovim/issues/2048#issuecomment-78045837

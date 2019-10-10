@@ -13,3 +13,6 @@ nnoremap <leader>p :Tags<cr>
 
 " Project dir files
 nnoremap <leader>/ :Files<cr>
+
+" Buffers
+nnoremap <leader>b :Buffers<cr>
