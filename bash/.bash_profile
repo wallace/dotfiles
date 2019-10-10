@@ -20,7 +20,7 @@ set -o vi
 
 alias ..='cd ..'
 alias gpom='git pull origin master'
-alias gp='git push'
+alias gp='git push --force-with-lease'
 alias git=hub
 
 # history settings
