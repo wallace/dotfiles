@@ -26,5 +26,12 @@ map <Leader>rf :call RunCurrentSpecFile()<CR>
 map <Leader>rl :call RunLastSpec()<CR>
 map <Leader>ra :call RunAllSpecs()<CR>
 
-map <Leader>tu :call VimuxRunCommand("be m " . expand("%") . ":" . line("."))<CR>
-map <Leader>tua :call VimuxRunCommand("be m " . expand("%"))<CR>
+map <Leader>tu :call VimuxRunCommand("bin/tt " . expand("%") . ":" . line("."))<CR>
+map <Leader>tua :call VimuxRunCommand("bin/tt " . expand("%"))<CR>
+
+map <Leader>vz :call VimuxZoomRunner()<CR>
+
+" Run last command executed by VimuxRunCommand
+map <Leader>vl :VimuxRunLastCommand<CR>
+
+let g:VimuxOrientation = "h"
