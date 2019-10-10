@@ -84,7 +84,6 @@ function $function_name {
 
 # general
 alias bi='brew install'
-alias irb='pry'
 
 # rails related
 alias be='bundle exec'
