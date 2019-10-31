@@ -29,6 +29,7 @@ See http://brandon.invergo.net/news/2012-05-26-using-gnu-stow-to-manage-your-dot
     $ stow tmux
     $ stow vim
     $ stow nvim
+    $ stow irb
     $ # install latest node version and set to global in nodenv
     $ curl -fLo ~/.local/share/nvim/site/autoload/plug.vim --create-dirs \
       https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
