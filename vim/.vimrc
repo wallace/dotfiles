@@ -38,13 +38,14 @@ Plug 'wallace/snipmate.vim'
 Plug 'ervandew/supertab'
 Plug 'tpope/vim-surround'
 Plug 'godlygeek/tabular'
+Plug 'janko-m/vim-test'
+Plug 'bswinnerton/vim-test-github'
 Plug 'kana/vim-textobj-user'
 Plug 'nelstrom/vim-textobj-rubyblock'
 Plug 'christoomey/vim-tmux-navigator'
 Plug 'duwanis/tomdoc.vim'
 Plug 'tpope/vim-unimpaired'
 Plug 'benmills/vimux'
-Plug 'skalnik/vim-vroom'
 Plug 'mattn/webapi-vim'
 Plug 'mbbill/undotree'
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
@@ -81,6 +82,7 @@ source ~/.vim/config/search.vim
 source ~/.vim/config/spellcheck.vim
 source ~/.vim/config/tabular.vim
 source ~/.vim/config/tags.vim
+source ~/.vim/config/vim_test.vim
 source ~/.vim/config/tempfiles.vim
 source ~/.vim/config/tmux_navigator.vim
 source ~/.vim/config/undotree.vim

@@ -19,19 +19,3 @@ fun LoadRubyKeybindings()
    " setlocal foldmethod=syntax
    " setlocal foldlevel=2
 endfun
-
-let g:rspec_command = 'call VimuxRunCommand("bin/rspec {spec}\n")'
-map <Leader>rr :call RunNearestSpec()<CR>
-map <Leader>rf :call RunCurrentSpecFile()<CR>
-map <Leader>rl :call RunLastSpec()<CR>
-map <Leader>ra :call RunAllSpecs()<CR>
-
-map <Leader>tu :call VimuxRunCommand("bin/tt " . expand("%") . ":" . line("."))<CR>
-map <Leader>tua :call VimuxRunCommand("bin/tt " . expand("%"))<CR>
-
-map <Leader>vz :call VimuxZoomRunner()<CR>
-
-" Run last command executed by VimuxRunCommand
-map <Leader>vl :VimuxRunLastCommand<CR>
-
-let g:VimuxOrientation = "h"
