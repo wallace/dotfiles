@@ -10,6 +10,8 @@ See http://brandon.invergo.net/news/2012-05-26-using-gnu-stow-to-manage-your-dot
     $ brew install stow rbenv nodenv readline neovim vim git tmux reattach-to-user-namespace fzf hub ripgrep adr-tools git-delta direnv
     $ brew install neomutt urlview notmuch offlineimap msmtp
     $ brew install --HEAD universal-ctags/universal-ctags/universal-ctags
+    $ chsh -s /bin/zsh
+    $ stow zsh
     $ stow ctags
     $ stow base16-shell
     $ stow git
