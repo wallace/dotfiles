@@ -85,6 +85,7 @@ source $ZSH/oh-my-zsh.sh
 # else
 #   export EDITOR='mvim'
 # fi
+export EDITOR=`which nvim`
 
 # Compilation flags
 # export ARCHFLAGS="-arch x86_64"
@@ -101,3 +102,13 @@ source $ZSH/oh-my-zsh.sh
 # Initializes nodenv which will add it to the path
 # so that vim is happy
 eval "$(nodenv init -)"
+
+# Base16 Shell, https://github.com/chriskempson/base16-shell
+BASE16_SHELL="$HOME/.config/base16-shell/"
+[ -n "$PS1" ] && \
+    [ -s "$BASE16_SHELL/profile_helper.sh" ] && \
+        eval "$("$BASE16_SHELL/profile_helper.sh")"
+
+BASE16_SHELL="$HOME/.config/base16-shell/base16-solarized.light.sh"
+[[ -s $BASE16_SHELL ]] && source $BASE16_SHELL
+
