@@ -59,10 +59,6 @@ set formatoptions=tcrqn21
 " % to bounce from do to end etc.
 runtime! macros/matchit.vim
 
-" Use the lhaste bash function (provided my custom .bash_profile) to post
-" visually selected content into hastebin and copy the URL into the clipboard.
-cnoreabbrev lhaste w !lhaste
-
 " Move visual block
 vnoremap J :m '>+1<CR>gv=gv
 vnoremap K :m '<-2<CR>gv=gv
