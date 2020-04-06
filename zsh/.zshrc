@@ -127,3 +127,9 @@ export LESS="-RSM~gIsw"
 # I - Case insensitive search
 # s - Squeeze empty lines to one
 # w - Highlight first line after PgDn
+
+if which rbenv > /dev/null
+then 
+  eval "$(rbenv init -)"
+  export PATH="$HOME/.rbenv/bin:$PATH"
+fi
