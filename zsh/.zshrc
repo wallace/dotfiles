@@ -116,3 +116,14 @@ BASE16_SHELL="$HOME/.config/base16-shell/"
 BASE16_SHELL="$HOME/.config/base16-shell/base16-solarized.light.sh"
 [[ -s $BASE16_SHELL ]] && source $BASE16_SHELL
 
+# Make less work with RAW ASCII colors
+# from http://blog.0x1fff.com/2009/11/linux-tip-color-enabled-pager-less.html
+export LESS="-RSM~gIsw"
+# R - Raw color codes in output (don't remove color codes)
+# S - Don't wrap lines, just cut off too long text
+# M - Long prompts ("Line X of Y")
+# ~ - Don't show those weird ~ symbols on lines after EOF
+# g - Highlight results when searching with slash key (/)
+# I - Case insensitive search
+# s - Squeeze empty lines to one
+# w - Highlight first line after PgDn
