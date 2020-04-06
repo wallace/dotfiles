@@ -150,3 +150,5 @@ export PATH="/usr/local/opt/mysql@5.7/bin:$PATH"
 # Set up go for using protobufs and generating the handlers
 GOPATH="$HOME/go"
 PATH="${PATH}:${GOPATH}/bin"
+
+export PATH
