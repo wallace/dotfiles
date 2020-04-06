@@ -87,6 +87,10 @@ source $ZSH/oh-my-zsh.sh
 # fi
 export EDITOR=`which nvim`
 
+# Vi mode
+bindkey -v
+export KEYTIMEOUT=1
+
 # Compilation flags
 # export ARCHFLAGS="-arch x86_64"
 
