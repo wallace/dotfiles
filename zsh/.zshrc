@@ -146,3 +146,7 @@ export FZF_DEFAULT_COMMAND='rg --files --no-ignore --hidden --follow --glob "!.g
 export FZF_COMPLETION_TRIGGER=',,'
 
 export PATH="/usr/local/opt/mysql@5.7/bin:$PATH"
+
+# Set up go for using protobufs and generating the handlers
+GOPATH="$HOME/go"
+PATH="${PATH}:${GOPATH}/bin"
