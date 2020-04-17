@@ -102,6 +102,7 @@ export KEYTIMEOUT=1
 # Example aliases
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
+alias gpfl="ggfl"
 
 # Initializes nodenv which will add it to the path
 # so that vim is happy
@@ -131,7 +132,6 @@ export LESS="-RSM~gIsw"
 if which rbenv > /dev/null
 then 
   eval "$(rbenv init -)"
-  export PATH="$HOME/.rbenv/bin:$PATH"
 fi
 
 ## fzf
@@ -151,4 +151,18 @@ export PATH="/usr/local/opt/mysql@5.7/bin:$PATH"
 GOPATH="$HOME/go"
 PATH="${PATH}:${GOPATH}/bin"
 
+# Set up direnv to work with zsh
+eval "$(direnv hook $SHELL)"
+
+#ruby-build installs a non-Homebrew OpenSSL for each Ruby version installed and these are never upgraded.
+#
+#To link Rubies to Homebrew's OpenSSL 1.1 (which is upgraded) add the following
+#to your ~/.zshrc:
+#  export RUBY_CONFIGURE_OPTS="--with-openssl-dir=$(brew --prefix openssl@1.1)"
+#
+#Note: this may interfere with building old versions of Ruby (e.g <2.4) that use
+#OpenSSL <1.1.
+export RUBY_CONFIGURE_OPTS="--with-openssl-dir=$(brew --prefix openssl@1.1)"
+
 export PATH
+
