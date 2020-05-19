@@ -13,6 +13,7 @@ brew "ripgrep"
 brew "adr-tools"
 brew "git-delta"
 brew "direnv"
+brew "octo-cli/octo/octo"
 
 # for setting up emails from google locally
 brew "neomutt"
