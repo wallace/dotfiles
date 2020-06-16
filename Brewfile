@@ -15,6 +15,12 @@ brew "git-delta"
 brew "direnv"
 brew "octo-cli/octo/octo"
 
+# https://github.com/zerowidth/zoom-calendar.alfredworkflow
+brew "ical-buddy"
+
+# github sql primer
+brew "git-lfs"
+
 # for setting up emails from google locally
 brew "neomutt"
 brew "urlview"
