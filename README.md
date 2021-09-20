@@ -32,3 +32,4 @@ See http://brandon.invergo.net/news/2012-05-26-using-gnu-stow-to-manage-your-dot
       https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
     $ # run PlugInstall from within nvim
     $ mkdir ~/.vim-tmp # add vim backup directory to prevent errors like https://stackoverflow.com/questions/8428210/cannot-create-backup-fileadd-to-overwrite
+    $ mkdir ~/.gitshots # add for git picture capture on git actions

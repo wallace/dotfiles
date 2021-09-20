@@ -169,3 +169,9 @@ export PATH
 # TODO: find a good home for this line. gives me the ability to jump into full
 # vim editor for a command, https://unix.stackexchange.com/a/6622.
 bindkey -M vicmd v edit-command-line
+
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+if command -v pyenv 1>/dev/null 2>&1; then
+  eval "$(pyenv init -)"
+fi
