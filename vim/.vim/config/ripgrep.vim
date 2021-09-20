@@ -9,4 +9,4 @@ map <Leader>a :Rg<SPACE>
 
 " In visual mode, yank the selected text in to register and then use ag to
 " search throughout the current project
-vnoremap <Leader>fip y:Rg"<C-R>""<CR>
+vnoremap <Leader>fip y:Rg "<C-R>""<CR>

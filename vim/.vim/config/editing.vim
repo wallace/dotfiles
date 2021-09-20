@@ -72,11 +72,11 @@ nnoremap <leader><tab> mtgg=G`t`
 " vnoremap <C-r> "hy:%s/<C-r>h//c<left><left>"
 vnoremap <c-h> y<ESC>/<c-r>"<CR>
 
-" Ctrl-A to ag search for visually highlighted text
+" Ctrl-A to Rg search for visually highlighted text
 " then %s//<replacement-string>
 " from http://stackoverflow.com/a/15934899
 " vnoremap <C-r> "hy:%s/<C-r>h//c<left><left>"
-vnoremap <c-a> y<ESC>:Ag<SPACE><c-r>"
+vnoremap <c-a> y<ESC>:Rg<SPACE><c-r>"
 
 " Removes trailing whitespace in the current file
 map <Leader>sx :%s/\s\+$//<CR>
