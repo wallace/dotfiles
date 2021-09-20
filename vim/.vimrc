@@ -39,7 +39,6 @@ Plug 'ervandew/supertab'
 Plug 'tpope/vim-surround'
 Plug 'godlygeek/tabular'
 Plug 'janko-m/vim-test'
-Plug 'bswinnerton/vim-test-github'
 Plug 'kana/vim-textobj-user'
 Plug 'nelstrom/vim-textobj-rubyblock'
 Plug 'christoomey/vim-tmux-navigator'
@@ -72,6 +71,7 @@ source ~/.vim/config/general_keys.vim
 source ~/.vim/config/general_settings.vim
 source ~/.vim/config/gist.vim
 source ~/.vim/config/gui.vim
+source ~/.vim/config/highlight_trailing_spaces.vim
 source ~/.vim/config/markdown.vim
 source ~/.vim/config/nerdcommenter.vim
 source ~/.vim/config/nerdtree.vim
