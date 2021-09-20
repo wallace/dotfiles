@@ -8,12 +8,9 @@
 .projects
 .rvmrc
 Session.vim
-bin/*
 db/*.sqlite3
-intersect_*
 log/*.log
-meta_docs
-meta_docs/
+meta-docs/
 mutt/.mutt/cache/headers/
 mutt/.mutt/mailcap
 production_structure.sql
