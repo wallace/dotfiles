@@ -166,3 +166,6 @@ export RUBY_CONFIGURE_OPTS="--with-openssl-dir=$(brew --prefix openssl@1.1)"
 
 export PATH
 
+# TODO: find a good home for this line. gives me the ability to jump into full
+# vim editor for a command, https://unix.stackexchange.com/a/6622.
+bindkey -M vicmd v edit-command-line
