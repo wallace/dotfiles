@@ -20,6 +20,9 @@ if [ "$CODESPACES" == "true" ]; then
   apt-get -y install fzf universal-ctags neovim zsh-autosuggestions stow
 
   fancy_echo "In codespaces! Installing dotfiles"
+  mv $HOME/.zshrc $HOME/.zshrc.old         # let's use mine
+  mv $HOME/.gitconfig $HOME/.gitconfig.old # let's use mine
+
   locals=( "nvim"  "vim" "zsh" "ruby_debugger" "git" "readline" "tmux" )
   for i in "${locals[@]}"
   do
@@ -43,7 +46,7 @@ if [ "$CODESPACES" == "true" ]; then
       https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
   fi
   mkdir ~/.vim-tmp # add vim backup directory to prevent errors like https://stackoverflow.com/questions/8428210/cannot-create-backup-fileadd-to-overwrite
-  # vim -u "$HOME"/.vimrc.bundles +PlugUpdate +PlugClean! +qa
+  vim +PlugUpdate +PlugClean! +qa
 
   #fancy_echo "Sourcing aliases"
   #[[ -f ~/.aliases ]] && source ~/.aliases
