@@ -22,7 +22,7 @@ if [ "$CODESPACES" == "true" ]; then
   fancy_echo "In codespaces! Installing dotfiles"
   mv $HOME/.gitconfig $HOME/.gitconfig.old # let's use mine
 
-  locals=( "nvim"  "vim" "ruby_debugger" "git" "readline" "tmux" )
+  locals=( "nvim"  "vim" "ruby_debugger" "git" "readline" "tmux" "zsh" "base16-shell" )
   for i in "${locals[@]}"
   do
     stow -t $HOME $i
