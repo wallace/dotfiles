@@ -20,9 +20,11 @@ if [ "$CODESPACES" == "true" ]; then
   apt-get -y install fzf universal-ctags neovim zsh-autosuggestions stow
 
   fancy_echo "In codespaces! Installing dotfiles"
-  path="/workspaces/.codespaces/.persistedshare/dotfiles/"
-  ln -s "$path/vim/.vim"                $HOME/".vim"
-  ln -s "$path/vim/.vim/.vimrc"         $HOME/".vimrc"
+  path="/workspaces/.codespaces/.persistedshare/dotfiles"
+  stow vim
+  stow nvim
+  #ln -s "$path/vim/.vim"                $HOME/".vim"
+  #ln -s "$path/vim/.vim/.vimrc"         $HOME/".vimrc"
   ln -s "$path/zsh/.zshrc"              $HOME/".zshrc"
   ln -s "$path/ruby_debugger/.rdebugrc" $HOME/".rdebugrc"
   ln -s "$path/git/.gitconfig"          $HOME/".gitconfig"
