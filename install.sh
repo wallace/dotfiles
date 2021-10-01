@@ -53,8 +53,11 @@ if [ "$CODESPACES" == "true" ]; then
   ##fancy_echo "Installing gems"
   ##gem install ripper-tags && ripper-tags -R
 
-  fancy_echo "Sourcing bashrc"
-  source ~/.bashrc
+  fancy_echo "Switching to zsh"
+  if ! grep -q "root.*/bin/zsh" /etc/passwd
+  then
+    chsh -s /bin/zsh root
+  fi
 
   fancy_echo "All done"
 else
