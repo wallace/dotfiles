@@ -13,6 +13,7 @@ Plug 'chrisbra/csv.vim'
 Plug 'Lokaltog/vim-easymotion'
 Plug 'tpope/vim-endwise'
 Plug 'tpope/vim-fugitive'
+Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
 Plug 'mattn/gist-vim'
 Plug 'airblade/vim-gitgutter'
