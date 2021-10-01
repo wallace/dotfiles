@@ -24,7 +24,7 @@ if [ "$CODESPACES" == "true" ]; then
   done
 
   fancy_echo "Installing apt-get packages"
-  apt-get install fzf universal-ctags neovim
+  apt-get -y install fzf universal-ctags neovim
 
   #fancy_echo "Getting thoughtbot dotfiles"
   #get $HOME/.vimrc https://raw.githubusercontent.com/thoughtbot/dotfiles/master/vimrc
