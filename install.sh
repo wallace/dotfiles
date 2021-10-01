@@ -17,7 +17,7 @@ get() {
 
 if [ "$CODESPACES" == "true" ]; then
   fancy_echo "In codespaces! Installing dotfiles"
-  locals=( "vim/.vim/.vimrc" "zsh/.zshrc" "ruby_debugger/.rdebugrc" "git/.gitconfig" "git/.gitignore" "readline/.inputrc" "tmux/.tmux.conf")
+  locals=( "vim/.vim" "vim/.vim/.vimrc" "zsh/.zshrc" "ruby_debugger/.rdebugrc" "git/.gitconfig" "git/.gitignore" "readline/.inputrc" "tmux/.tmux.conf")
   for i in "${locals[@]}"
   do
     ln -s $(pwd)/"$i" $HOME/"$i"
