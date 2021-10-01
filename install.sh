@@ -17,10 +17,10 @@ get() {
 
 if [ "$CODESPACES" == "true" ]; then
   fancy_echo "In codespaces! Installing dotfiles"
-  locals=( "tmux.conf.local" "vimrc.local" "vimrc.bundles.local" "aliases.local" "gitconfig.local" "ripgreprc" )
+  locals=( "vim/.vim/.vimrc" "zsh/.zshrc" "ruby_debugger/.rdebugrc" "git/.gitconfig" "git/.gitignore" "readline/.inputrc" "tmux/.tmux.conf")
   for i in "${locals[@]}"
   do
-    ln -s $(pwd)/"$i" $HOME/."$i"
+    ln -s $(pwd)/"$i" $HOME/"$i"
   done
 
   fancy_echo "Installing apt-get packages"
@@ -42,6 +42,7 @@ if [ "$CODESPACES" == "true" ]; then
     curl -fLo "$HOME"/.vim/autoload/plug.vim --create-dirs \
       https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
   fi
+  mkdir ~/.vim-tmp # add vim backup directory to prevent errors like https://stackoverflow.com/questions/8428210/cannot-create-backup-fileadd-to-overwrite
   vim -u "$HOME"/.vimrc.bundles +PlugUpdate +PlugClean! +qa
   reset -Q
 
