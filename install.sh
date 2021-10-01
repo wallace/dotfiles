@@ -21,16 +21,17 @@ if [ "$CODESPACES" == "true" ]; then
 
   fancy_echo "In codespaces! Installing dotfiles"
   path="/workspaces/.codespaces/.persistedshare/dotfiles"
+  ln -s "$path"              $HOME/".dotfiles"
   stow vim
   stow nvim
   #ln -s "$path/vim/.vim"                $HOME/".vim"
   #ln -s "$path/vim/.vim/.vimrc"         $HOME/".vimrc"
-  ln -s "$path/zsh/.zshrc"              $HOME/".zshrc"
-  ln -s "$path/ruby_debugger/.rdebugrc" $HOME/".rdebugrc"
-  ln -s "$path/git/.gitconfig"          $HOME/".gitconfig"
-  ln -s "$path/git/.gitignore"          $HOME/".gitignore"
-  ln -s "$path/readline/.inputrc"       $HOME/".inputrc"
-  ln -s "$path/tmux/.tmux.conf"         $HOME/".tmux.conf"
+  #ln -s "$path/zsh/.zshrc"              $HOME/".zshrc"
+  #ln -s "$path/ruby_debugger/.rdebugrc" $HOME/".rdebugrc"
+  #ln -s "$path/git/.gitconfig"          $HOME/".gitconfig"
+  #ln -s "$path/git/.gitignore"          $HOME/".gitignore"
+  #ln -s "$path/readline/.inputrc"       $HOME/".inputrc"
+  #ln -s "$path/tmux/.tmux.conf"         $HOME/".tmux.conf"
 
   #fancy_echo "Getting thoughtbot dotfiles"
   #get $HOME/.vimrc https://raw.githubusercontent.com/thoughtbot/dotfiles/master/vimrc
