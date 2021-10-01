@@ -20,18 +20,11 @@ if [ "$CODESPACES" == "true" ]; then
   apt-get -y install fzf universal-ctags neovim zsh-autosuggestions stow
 
   fancy_echo "In codespaces! Installing dotfiles"
-  path="/workspaces/.codespaces/.persistedshare/dotfiles"
-  ln -s "$path"              $HOME/".dotfiles"
-  stow vim
-  stow nvim
-  #ln -s "$path/vim/.vim"                $HOME/".vim"
-  #ln -s "$path/vim/.vim/.vimrc"         $HOME/".vimrc"
-  #ln -s "$path/zsh/.zshrc"              $HOME/".zshrc"
-  #ln -s "$path/ruby_debugger/.rdebugrc" $HOME/".rdebugrc"
-  #ln -s "$path/git/.gitconfig"          $HOME/".gitconfig"
-  #ln -s "$path/git/.gitignore"          $HOME/".gitignore"
-  #ln -s "$path/readline/.inputrc"       $HOME/".inputrc"
-  #ln -s "$path/tmux/.tmux.conf"         $HOME/".tmux.conf"
+  locals=( "nvim"  "vim" "zsh" "ruby_debugger" "git" "readline" "tmux" )
+  for i in "${locals[@]}"
+  do
+    stow -t $HOME $i
+  done
 
   #fancy_echo "Getting thoughtbot dotfiles"
   #get $HOME/.vimrc https://raw.githubusercontent.com/thoughtbot/dotfiles/master/vimrc
