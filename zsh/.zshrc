@@ -85,7 +85,7 @@ source $ZSH/oh-my-zsh.sh
 # else
 #   export EDITOR='mvim'
 # fi
-export EDITOR=`which nvim`
+export EDITOR=`which vim`
 
 # Vi mode
 bindkey -v

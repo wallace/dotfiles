@@ -17,7 +17,7 @@ get() {
 
 if [ "$CODESPACES" == "true" ]; then
   fancy_echo "Installing apt-get packages"
-  apt-get -y install fzf universal-ctags neovim zsh-autosuggestions stow
+  apt-get -y install fzf universal-ctags zsh-autosuggestions stow
 
   fancy_echo "In codespaces! Installing dotfiles"
   mv $HOME/.gitconfig $HOME/.gitconfig.old # let's use mine
