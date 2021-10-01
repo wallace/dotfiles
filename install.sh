@@ -20,7 +20,7 @@ if [ "$CODESPACES" == "true" ]; then
   locals=( "vim/.vim" "vim/.vim/.vimrc" "zsh/.zshrc" "ruby_debugger/.rdebugrc" "git/.gitconfig" "git/.gitignore" "readline/.inputrc" "tmux/.tmux.conf")
   for i in "${locals[@]}"
   do
-    ln -s $(pwd)/"$i" $HOME/"$i"
+    ln -s "/workspaces/.codespaces/.persistedshare/dotfiles/$i" $HOME/"$i"
   done
 
   fancy_echo "Installing apt-get packages"
@@ -44,7 +44,7 @@ if [ "$CODESPACES" == "true" ]; then
   fi
   mkdir ~/.vim-tmp # add vim backup directory to prevent errors like https://stackoverflow.com/questions/8428210/cannot-create-backup-fileadd-to-overwrite
   # vim -u "$HOME"/.vimrc.bundles +PlugUpdate +PlugClean! +qa
-  # reset -Q
+  reset -Q
 
   #fancy_echo "Sourcing aliases"
   #[[ -f ~/.aliases ]] && source ~/.aliases
