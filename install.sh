@@ -48,7 +48,6 @@ if [ "$CODESPACES" == "true" ]; then
   fi
   mkdir ~/.vim-tmp # add vim backup directory to prevent errors like https://stackoverflow.com/questions/8428210/cannot-create-backup-fileadd-to-overwrite
   # vim -u "$HOME"/.vimrc.bundles +PlugUpdate +PlugClean! +qa
-  reset -Q
 
   #fancy_echo "Sourcing aliases"
   #[[ -f ~/.aliases ]] && source ~/.aliases
