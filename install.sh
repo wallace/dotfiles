@@ -24,7 +24,7 @@ if [ "$CODESPACES" == "true" ]; then
   done
 
   fancy_echo "Installing apt-get packages"
-  apt-get -y install fzf universal-ctags neovim
+  apt-get -y install fzf universal-ctags neovim zsh-autosuggestions
 
   #fancy_echo "Getting thoughtbot dotfiles"
   #get $HOME/.vimrc https://raw.githubusercontent.com/thoughtbot/dotfiles/master/vimrc
@@ -44,7 +44,7 @@ if [ "$CODESPACES" == "true" ]; then
   fi
   mkdir ~/.vim-tmp # add vim backup directory to prevent errors like https://stackoverflow.com/questions/8428210/cannot-create-backup-fileadd-to-overwrite
   vim -u "$HOME"/.vimrc.bundles +PlugUpdate +PlugClean! +qa
-  reset -Q
+  # reset -Q
 
   #fancy_echo "Sourcing aliases"
   #[[ -f ~/.aliases ]] && source ~/.aliases
