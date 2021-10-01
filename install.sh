@@ -16,15 +16,19 @@ get() {
 }
 
 if [ "$CODESPACES" == "true" ]; then
-  fancy_echo "In codespaces! Installing dotfiles"
-  locals=( "vim/.vim" "vim/.vim/.vimrc" "zsh/.zshrc" "ruby_debugger/.rdebugrc" "git/.gitconfig" "git/.gitignore" "readline/.inputrc" "tmux/.tmux.conf")
-  for i in "${locals[@]}"
-  do
-    ln -s "/workspaces/.codespaces/.persistedshare/dotfiles/$i" $HOME/"$i"
-  done
-
   fancy_echo "Installing apt-get packages"
-  apt-get -y install fzf universal-ctags neovim zsh-autosuggestions
+  apt-get -y install fzf universal-ctags neovim zsh-autosuggestions stow
+
+  fancy_echo "In codespaces! Installing dotfiles"
+  path="/workspaces/.codespaces/.persistedshare/dotfiles/"
+  ln -s "$path/vim/.vim"                $HOME/".vim"
+  ln -s "$path/vim/.vim/.vimrc"         $HOME/".vimrc"
+  ln -s "$path/zsh/.zshrc"              $HOME/".zshrc"
+  ln -s "$path/ruby_debugger/.rdebugrc" $HOME/".rdebugrc"
+  ln -s "$path/git/.gitconfig"          $HOME/".gitconfig"
+  ln -s "$path/git/.gitignore"          $HOME/".gitignore"
+  ln -s "$path/readline/.inputrc"       $HOME/".inputrc"
+  ln -s "$path/tmux/.tmux.conf"         $HOME/".tmux.conf"
 
   #fancy_echo "Getting thoughtbot dotfiles"
   #get $HOME/.vimrc https://raw.githubusercontent.com/thoughtbot/dotfiles/master/vimrc
