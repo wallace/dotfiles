@@ -105,8 +105,10 @@ export KEYTIMEOUT=1
 alias gpfl="ggfl"
 
 # Initializes nodenv which will add it to the path
-# so that vim is happy
-eval "$(nodenv init -)"
+# so that vim is happy (but not in codespaces)
+if [ "$CODESPACES" != "true" ]; then ]
+  eval "$(nodenv init -)"
+fi
 
 # Base16 Shell, https://github.com/chriskempson/base16-shell
 BASE16_SHELL="$HOME/.config/base16-shell/"
@@ -130,7 +132,7 @@ export LESS="-RSM~gIsw"
 # w - Highlight first line after PgDn
 
 if which rbenv > /dev/null
-then 
+then
   eval "$(rbenv init -)"
 fi
 
@@ -152,7 +154,9 @@ GOPATH="$HOME/go"
 PATH="${PATH}:${GOPATH}/bin"
 
 # Set up direnv to work with zsh
-eval "$(direnv hook $SHELL)"
+if which direnv > /dev/null
+  eval "$(direnv hook $SHELL)"
+fi
 
 #ruby-build installs a non-Homebrew OpenSSL for each Ruby version installed and these are never upgraded.
 #
