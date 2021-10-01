@@ -26,6 +26,7 @@
 	excludesfile = ~/.gitignore
 	autocrlf = input
 	pager = delta --light
+	editor = vim
 [apply]
 	whitespace = nowarn
 [pack]
