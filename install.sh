@@ -16,14 +16,14 @@ get() {
 }
 
 if [ "$CODESPACES" == "true" ]; then
-  fancy_echo "Installing apt-get packages"
+  fancy_echo "In codespaces! Installing apt-get packages"
   apt-get -y install fzf universal-ctags zsh-autosuggestions stow
 
   fancy_echo "Installing git-delta"
   wget https://github.com/dandavison/delta/releases/download/0.8.3/git-delta_0.8.3_amd64.deb
   dpkg -i git-delta_0.8.3_amd64.deb
 
-  fancy_echo "In codespaces! Installing dotfiles"
+  fancy_echo "Installing dotfiles"
   mv $HOME/.gitconfig $HOME/.gitconfig.old # let's use mine
 
   locals=( "nvim"  "vim" "ruby_debugger" "git" "readline" "tmux" "zsh" "base16-shell" )
@@ -56,8 +56,8 @@ if [ "$CODESPACES" == "true" ]; then
   #echo "alias g='git'" >> "$HOME"/.bashrc
   #echo "export EDITOR=vim" >> "$HOME"/.bashrc
 
-  ##fancy_echo "Installing gems"
-  ##gem install ripper-tags && ripper-tags -R
+  fancy_echo "Installing gems"
+  gem install ripper-tags && ripper-tags -R
 
   fancy_echo "Switching to zsh"
   if ! grep -q "root.*/bin/zsh" /etc/passwd
