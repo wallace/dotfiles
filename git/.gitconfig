@@ -18,10 +18,6 @@
 	pr = !sh -c 'git log $0..next-release --ancestry-path --merges --oneline | tail -1'
 	find-merge = "!sh -c 'commit=$0 && branch=${1:-HEAD} && (git rev-list $commit..$branch --ancestry-path | cat -n; git rev-list $commit..$branch --first-parent | cat -n) | sort -k2 -s | uniq -f1 -d | sort -n | tail -1 | cut -f2'"
 	show-merge = "!sh -c 'merge=$(git find-merge $0 $1) && [ -n \"$merge\" ] && git show $merge'"
-[merge]
-	tool = p4merge
-  conflictstyle=diff3
-	summary = true
 [core]
 	excludesfile = ~/.gitignore
 	autocrlf = input
@@ -46,33 +42,24 @@
 [mergetool]
   prompt = false
   keepBackup = false
-[mergetool "fugitive"]
-  cmd = mvim -f -c "Gdiff" "$MERGED"
 [mergetool "meld"]
   cmd = $HOME/bin/meldmerge $BASE $LOCAL $REMOTE $MERGED
-[mergetool "p4merge"]
-  cmd = /Applications/p4merge.app/Contents/Resources/launchp4merge "$PWD/$BASE" "$PWD/$LOCAL" "$PWD/$REMOTE" "$PWD/$MERGED"
-  keepTemporaries = false
-  trustExitCode = false
-[mergetool "gvim"]
-	cmd = vim \"+Gdiff\" $MERGED
 [push]
 	default = simple
 [pull]
   default = current
 	rebase = merges
-
 [hub]
-protocol = ssh
+  protocol = ssh
 [rebase]
 	autostash = true
 	autosquash = true
 [stash]
 	showPatch = true
-[mergetool "p4mergetool"]
-	cmd = /Applications/p4merge.app/Contents/Resources/launchp4merge $PWD/$BASE $PWD/$REMOTE $PWD/$LOCAL $PWD/$MERGED
 [includeIf "gitdir:/Users"]
   path = ~/.gitconfig-mac
+[includeIf "gitdir:/home"]
+  path = ~/.gitconfig-linux
 [color "diff-highlight"]
 	oldNormal = red bold
 	oldHighlight = red bold 52

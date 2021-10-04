@@ -1,2 +1,12 @@
-[credential]
+[mergetool "p4mergetool"]
+	cmd = /Applications/p4merge.app/Contents/Resources/launchp4merge $PWD/$BASE $PWD/$REMOTE $PWD/$LOCAL $PWD/$MERGED
+[mergetool "p4merge"]
+  cmd = /Applications/p4merge.app/Contents/Resources/launchp4merge "$PWD/$BASE" "$PWD/$LOCAL" "$PWD/$REMOTE" "$PWD/$MERGED"
+  keepTemporaries = false
+  trustExitCode = false
+[merge]
+	tool = p4merge
+  conflictstyle=diff3
+	summary = true
+credential]
 	helper = osxkeychain
