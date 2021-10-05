@@ -103,10 +103,11 @@ export KEYTIMEOUT=1
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 alias gpfl="ggfl"
+alias vim=nvim
 
 # Initializes nodenv which will add it to the path
 # so that vim is happy (but not in codespaces)
-if [ "$CODESPACES" != "true" ]; then ]
+if [ "$CODESPACES" != "true" ]; then
   eval "$(nodenv init -)"
 fi
 
@@ -154,7 +155,7 @@ GOPATH="$HOME/go"
 PATH="${PATH}:${GOPATH}/bin"
 
 # Set up direnv to work with zsh
-if which direnv > /dev/null
+if which direnv > /dev/null; then
   eval "$(direnv hook $SHELL)"
 fi
 
