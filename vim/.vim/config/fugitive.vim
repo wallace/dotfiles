@@ -12,7 +12,7 @@ map <Leader>gl :Glog<CR>
 map <Leader>gd :Gdiff<CR>
 
 " Run git blame
-map <Leader>gb :Gblame<CR>
+map <Leader>gb :Git blame<CR>
 
 " Git push
 map <Leader>gp :Gpush<CR>
