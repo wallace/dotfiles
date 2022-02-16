@@ -65,6 +65,10 @@ if [ "$CODESPACES" == "true" ]; then
     chsh -s /bin/zsh root
   fi
 
+  # Run pre-push git commit hook to check code owners
+  echo "Setting up commit hook for codeowners"
+  cd /workspaces/github && ln -s $(pwd)/script/git-hooks/pre-push .git/hooks/pre-push
+
   fancy_echo "All done"
 else
   fancy_echo "Not running in a codespace"
