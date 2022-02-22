@@ -25,7 +25,6 @@ if [ "$CODESPACES" == "true" ]; then
 
   fancy_echo "Installing dotfiles"
   mv $HOME/.gitconfig $HOME/.gitconfig.old # let's use mine
-  mv $HOME/.zshrc $HOME/.zshrc.old         # let's use mine
 
   locals=( "nvim"  "vim" "ruby_debugger" "git" "readline" "tmux" "zsh" "base16-shell" )
   for i in "${locals[@]}"
@@ -64,7 +63,7 @@ if [ "$CODESPACES" == "true" ]; then
   if ! grep -q "root.*/bin/zsh" /etc/passwd
   then
     chsh -s /bin/zsh root
-    set -o vi
+    `echo "bindkey -v" >> $HOME/.zshrc`
   fi
 
   # Run pre-push git commit hook to check code owners
