@@ -80,3 +80,7 @@ vnoremap <c-a> y<ESC>:Rg<SPACE><c-r>"
 
 " Removes trailing whitespace in the current file
 map <Leader>sx :%s/\s\+$//<CR>
+
+" Trying some mappings for https://github.com/ojroques/vim-oscyank
+vnoremap <leader>y :OSCYank<CR>
+nmap <leader>o <Plug>OSCYank
