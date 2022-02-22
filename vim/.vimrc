@@ -49,6 +49,8 @@ Plug 'benmills/vimux'
 Plug 'mattn/webapi-vim'
 Plug 'mbbill/undotree'
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
+Plug 'Cian911/vim-cadence'
+Plug 'ojroques/vim-oscyank'
 
 call plug#end()
 
