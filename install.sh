@@ -63,6 +63,7 @@ if [ "$CODESPACES" == "true" ]; then
   if ! grep -q "root.*/bin/zsh" /etc/passwd
   then
     chsh -s /bin/zsh root
+    set -o vi
   fi
 
   # Run pre-push git commit hook to check code owners
