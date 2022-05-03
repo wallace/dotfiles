@@ -17,11 +17,11 @@ get() {
 
 if [ "$CODESPACES" == "true" ]; then
   fancy_echo "In codespaces! Installing apt-get packages"
-  apt-get -y install fzf universal-ctags zsh-autosuggestions stow
+  sudo apt-get -y install fzf universal-ctags zsh-autosuggestions stow
 
   fancy_echo "Installing git-delta"
   wget https://github.com/dandavison/delta/releases/download/0.8.3/git-delta_0.8.3_amd64.deb
-  dpkg -i git-delta_0.8.3_amd64.deb
+  sudo dpkg -i git-delta_0.8.3_amd64.deb
 
   fancy_echo "Installing dotfiles"
   mv $HOME/.gitconfig $HOME/.gitconfig.old # let's use mine
