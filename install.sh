@@ -17,7 +17,7 @@ get() {
 
 # default to codespace user
 if [ -z "${USER}" ]; then
-  USER=codespace
+  USER=vscode
 fi
 
 if [ "$CODESPACES" == "true" ]; then
