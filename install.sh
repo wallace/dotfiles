@@ -60,9 +60,9 @@ if [ "$CODESPACES" == "true" ]; then
   gem install ripper-tags && ripper-tags -R --exclude=vendor
 
   fancy_echo "Switching to zsh"
-  if ! grep -q "root.*/bin/zsh" /etc/passwd
+  if ! grep -q "${USER}.*/bin/zsh" /etc/passwd
   then
-    chsh -s /bin/zsh root
+    sudo chsh -s /bin/zsh ${USER}
     `echo "bindkey -v" >> $HOME/.zshrc`
   fi
 
