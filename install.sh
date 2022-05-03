@@ -15,6 +15,11 @@ get() {
   curl -fLo $1 --create-dirs $2
 }
 
+# default to codespace user
+if [ -z "${USER}" ]; then
+  USER=codespace
+fi
+
 if [ "$CODESPACES" == "true" ]; then
   fancy_echo "In codespaces! Installing apt-get packages"
   sudo apt-get -y install fzf universal-ctags zsh-autosuggestions stow
