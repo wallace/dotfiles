@@ -58,7 +58,7 @@ if [ "$CODESPACES" == "true" ]; then
   #echo "export EDITOR=vim" >> "$HOME"/.bashrc
 
   fancy_echo "Installing gems"
-  gem install ripper-tags && ripper-tags -R --exclude=vendor
+  sudo gem install git_remote_branch ripper-tags && ripper-tags -R --exclude=vendor
 
   fancy_echo "Switching to zsh"
   if ! grep -q "${USER}.*/bin/zsh" /etc/passwd
