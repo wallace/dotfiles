@@ -32,7 +32,7 @@ if [ "$CODESPACES" == "true" ]; then
   # set up org specific overrides
   fancy_echo "Installing GitHub codespace related dotoverrides configs..."
   mkdir -p "/home/$USER/.dotoverrides"
-  fancy_echo -e "[user]\n  email = wallace@github.com" >> "/home/$USER/.dotoverrides/gitconfig"
+  echo -e "[user]\n  email = wallace@github.com" >> "/home/$USER/.dotoverrides/gitconfig"
 
   fancy_echo "In codespaces! Installing apt-get packages"
   sudo apt-get -y install fzf universal-ctags zsh-autosuggestions stow
@@ -50,15 +50,6 @@ if [ "$CODESPACES" == "true" ]; then
   do
     stow -t $HOME $i
   done
-
-  #fancy_echo "Getting thoughtbot dotfiles"
-  #get $HOME/.vimrc https://raw.githubusercontent.com/thoughtbot/dotfiles/master/vimrc
-  #get $HOME/.vimrc.bundles https://raw.githubusercontent.com/thoughtbot/dotfiles/master/vimrc.bundles
-  #get $HOME/.aliases https://raw.githubusercontent.com/thoughtbot/dotfiles/master/aliases
-  #get $HOME/.gitconfig https://raw.githubusercontent.com/thoughtbot/dotfiles/master/gitconfig
-  #get $HOME/.gitmessage https://raw.githubusercontent.com/thoughtbot/dotfiles/master/gitmessage
-  #get $HOME/.gitignore https://raw.githubusercontent.com/thoughtbot/dotfiles/master/gitignore
-  #get $HOME/.tmux.conf https://raw.githubusercontent.com/thoughtbot/dotfiles/master/tmux.conf
 
   fancy_echo "Installing vim plugins"
   if [ -e "$HOME"/.vim/autoload/plug.vim ]; then
