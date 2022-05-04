@@ -60,6 +60,8 @@
   path = ~/.gitconfig-mac
 [includeIf "gitdir:/home"]
   path = ~/.gitconfig-linux
+[include]
+  path = ~/.dotoverrides/gitconfig
 [color "diff-highlight"]
 	oldNormal = red bold
 	oldHighlight = red bold 52

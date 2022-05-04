@@ -1,8 +1,10 @@
 #!/bin/bash
+# https://docs.github.com/en/codespaces/customizing-your-codespace/personalizing-codespaces-for-your-account
 
+# let's have our own log
 exec > >(tee -i $HOME/dotfiles_install.log)
 exec 2>&1
-set -x
+set -ex
 
 fancy_echo() {
   local fmt="$1"; shift
@@ -21,6 +23,16 @@ if [ -z "${USER}" ]; then
 fi
 
 if [ "$CODESPACES" == "true" ]; then
+  fancy_echo "Switching to zsh"
+  if ! grep -q "${USER}.*/bin/zsh" /etc/passwd
+  then
+    sudo chsh -s /bin/zsh ${USER}
+  fi
+
+  # set up org specific overrides
+  fancy_echo "Installing GitHub codespace related dotoverrides configs..."
+  fancy_echo -e "[user]\n  email = wallace@github.com" >> dotoverrides/gitconfig
+
   fancy_echo "In codespaces! Installing apt-get packages"
   sudo apt-get -y install fzf universal-ctags zsh-autosuggestions stow
 
@@ -64,13 +76,6 @@ if [ "$CODESPACES" == "true" ]; then
 
   fancy_echo "Installing gems"
   sudo gem install git_remote_branch ripper-tags && ripper-tags -R --exclude=vendor
-
-  fancy_echo "Switching to zsh"
-  if ! grep -q "${USER}.*/bin/zsh" /etc/passwd
-  then
-    sudo chsh -s /bin/zsh ${USER}
-    `echo "bindkey -v" >> $HOME/.zshrc`
-  fi
 
   # Run pre-push git commit hook to check code owners
   echo "Setting up commit hook for codeowners"

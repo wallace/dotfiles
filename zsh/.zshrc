@@ -1,3 +1,5 @@
+ZSHDIR="${HOME}/.zsh"
+
 # If you come from bash you might have to change your $PATH.
 # export PATH=$HOME/bin:/usr/local/bin:$PATH
 
@@ -180,3 +182,6 @@ export PATH="$PYENV_ROOT/bin:$PATH"
 if command -v pyenv 1>/dev/null 2>&1; then
   eval "$(pyenv init -)"
 fi
+
+# source codespaces related things if we are in one
+[ -n "$CODESPACES" ] && source ${ZSHDIR}/codespaces.zsh
