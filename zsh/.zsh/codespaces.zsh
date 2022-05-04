@@ -3,3 +3,4 @@
 export SHELL=/bin/zsh
 
 ZSH_THEME="codespaces"
+source $ZSH/oh-my-zsh.sh
