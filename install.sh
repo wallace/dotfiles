@@ -31,7 +31,7 @@ if [ "$CODESPACES" == "true" ]; then
 
   # set up org specific overrides
   fancy_echo "Installing GitHub codespace related dotoverrides configs..."
-  fancy_echo -e "[user]\n  email = wallace@github.com" >> dotoverrides/gitconfig
+  fancy_echo -e "[user]\n  email = wallace@github.com" >> "$USER/.dotoverrides/gitconfig"
 
   fancy_echo "In codespaces! Installing apt-get packages"
   sudo apt-get -y install fzf universal-ctags zsh-autosuggestions stow
