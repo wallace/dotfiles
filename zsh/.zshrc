@@ -169,7 +169,11 @@ fi
 #
 #Note: this may interfere with building old versions of Ruby (e.g <2.4) that use
 #OpenSSL <1.1.
-export RUBY_CONFIGURE_OPTS="--with-openssl-dir=$(brew --prefix openssl@1.1)"
+if [[ -n $CODESPACES ]]; then
+else
+  # only for mac
+  export RUBY_CONFIGURE_OPTS="--with-openssl-dir=$(brew --prefix openssl@1.1)"
+fi
 
 export PATH
 
