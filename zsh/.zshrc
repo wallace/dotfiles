@@ -105,7 +105,10 @@ export KEYTIMEOUT=1
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 alias gpfl="ggfl"
-alias vim=nvim
+if [[ -n $CODESPACES ]]; then
+else
+  alias vim=nvim
+fi
 
 # Initializes nodenv which will add it to the path
 # so that vim is happy (but not in codespaces)
@@ -170,6 +173,7 @@ fi
 #Note: this may interfere with building old versions of Ruby (e.g <2.4) that use
 #OpenSSL <1.1.
 if [[ -n $CODESPACES ]]; then
+  unalias grb
 else
   # only for mac
   export RUBY_CONFIGURE_OPTS="--with-openssl-dir=$(brew --prefix openssl@1.1)"

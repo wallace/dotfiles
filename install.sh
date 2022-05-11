@@ -45,7 +45,7 @@ if [ "$CODESPACES" == "true" ]; then
   mv $HOME/.gitconfig $HOME/.gitconfig.old # let's use mine
   mv $HOME/.zshrc $HOME/.zshrc.old         # let's use mine
 
-  locals=( "nvim"  "vim" "ruby_debugger" "git" "readline" "tmux" "zsh" "base16-shell" )
+  locals=( "vim" "ruby_debugger" "git" "readline" "tmux" "zsh" "base16-shell" )
   for i in "${locals[@]}"
   do
     stow -t $HOME $i
