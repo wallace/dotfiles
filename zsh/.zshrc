@@ -93,10 +93,6 @@ source $ZSH/oh-my-zsh.sh
 # fi
 export EDITOR=`which vim`
 
-# Vi mode
-bindkey -v
-export KEYTIMEOUT=1
-
 # Compilation flags
 # export ARCHFLAGS="-arch x86_64"
 
@@ -199,3 +195,9 @@ fi
 
 # source codespaces related things if we are in one
 [ -n "$CODESPACES" ] && source ${ZSHDIR}/codespaces.zsh
+
+# Vi mode
+bindkey -v
+export KEYTIMEOUT=1
+
+bindkey '^R' history-incremental-search-backward
