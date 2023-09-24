@@ -8,8 +8,10 @@ See http://brandon.invergo.net/news/2012-05-26-using-gnu-stow-to-manage-your-dot
 ### Prerequisites
 
     $ brew bundle # installs all things listed in Brewfile
-    $ brew install --HEAD universal-ctags/universal-ctags/universal-ctags
-    $ chsh -s /bin/zsh
+    $ # set up oh-my-zsh
+    $ sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+    $ # remove default zshrc from oh-my-zsh
+    $ rm ~/.zshrc
     $ stow zsh
     $ stow ctags
     $ stow base16-shell
