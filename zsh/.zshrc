@@ -105,7 +105,7 @@ export EDITOR=`which vim`
 alias gpfl="ggfl"
 if [[ -n $CODESPACES ]]; then
 else
-  alias vim=nvim
+  # alias vim=nvim
 fi
 
 # Initializes nodenv which will add it to the path

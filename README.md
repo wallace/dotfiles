@@ -27,11 +27,11 @@ See http://brandon.invergo.net/news/2012-05-26-using-gnu-stow-to-manage-your-dot
     $ stow scripts
     $ stow tmux
     $ stow vim
-    $ stow nvim
     $ stow irb
+    $ # stow nvim
     $ # install latest node version and set to global in nodenv
-    $ curl -fLo ~/.local/share/nvim/site/autoload/plug.vim --create-dirs \
-      https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
-    $ # run PlugInstall from within nvim
+    $ curl -fLo ~/.vim/autoload/plug.vim --create-dirs \
+        https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+    $ # run PlugInstall from within vim
     $ mkdir ~/.vim-tmp # add vim backup directory to prevent errors like https://stackoverflow.com/questions/8428210/cannot-create-backup-fileadd-to-overwrite
     $ mkdir ~/.gitshots # add for git picture capture on git actions
