@@ -1,3 +1,4 @@
+brew "pure"
 brew "stow"
 brew "rbenv"
 brew "nodenv"
