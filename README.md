@@ -42,3 +42,6 @@ See http://brandon.invergo.net/news/2012-05-26-using-gnu-stow-to-manage-your-dot
 ## TODOs
 
  - [ ] only run rubocop pre-commit hook when rb files are being committed
+ - [ ] switch to neovim??
+ - [ ] add copilot vim integration
+
