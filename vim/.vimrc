@@ -8,7 +8,7 @@ Plug 'vim-scripts/AnsiEsc.vim'
 Plug 'Townk/vim-autoclose'
 Plug 'chriskempson/base16-vim'
 Plug 'tpope/vim-bundler' " path and tags includes gems from Bundle file
-Plug 'kchmck/vim-coffee-script'
+Plug 'github/copilot.vim'
 Plug 'chrisbra/csv.vim'
 Plug 'Lokaltog/vim-easymotion'
 Plug 'tpope/vim-endwise'
