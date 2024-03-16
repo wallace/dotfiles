@@ -110,6 +110,18 @@ else
   # alias vim=nvim
 fi
 
+# Run rubocop over files that differ from the master branch
+alias mastrbc="git diff-tree -r --no-commit-id --name-only master@\{u\} head | xargs ls -1 2>/dev/null | xargs rubocop --force-exclusion"
+
+# Run rubocop over files that differ from the main branch
+alias mainrbc="git diff-tree -r --no-commit-id --name-only main@\{u\} head | xargs ls -1 2>/dev/null | xargs rubocop --force-exclusion"
+
+# Run rubocop over files that differ from the current branch
+alias currrbc="git diff-tree -r --no-commit-id --name-only @\{u\} head | xargs rubocop --force-exclusion"
+
+# Run rubocop over uncommitted files
+alias nottrbc="git ls-files -m | xargs ls -1 2>/dev/null | grep '\.rb$' | xargs rubocop --force-exclusion"
+
 # Initializes nodenv which will add it to the path
 # so that vim is happy (but not in codespaces)
 if [ "$CODESPACES" != "true" ]; then
@@ -206,3 +218,6 @@ bindkey '^R' history-incremental-search-backward
 export NVM_DIR="$HOME/.nvm"
 [ -s "/opt/homebrew/opt/nvm/nvm.sh" ] && \. "/opt/homebrew/opt/nvm/nvm.sh"  # This loads nvm
 [ -s "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm" ] && \. "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm"  # This loads nvm bash_completion
+
+## for rails app
+export GEOS_LIBRARY_PATH=/opt/homebrew/lib #Needed for M1 Mac
