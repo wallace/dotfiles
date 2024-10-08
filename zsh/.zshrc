@@ -221,3 +221,17 @@ export NVM_DIR="$HOME/.nvm"
 
 ## for rails app
 export GEOS_LIBRARY_PATH=/opt/homebrew/lib #Needed for M1 Mac
+
+## for work...
+export COMPOSE_PROFILES="tourneys,frontend"
+
+# Created by `pipx` on 2024-08-28 22:15:59
+export PATH="$PATH:/Users/jonathan.wallace/.local/bin"
+export PATH="/opt/homebrew/opt/postgresql@15/bin:$PATH"
+
+# Set up android studio and emulator
+export JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home
+export PATH=$PATH:$HOME/.maestro/bin
+export ANDROID_HOME=$HOME/Library/Android/sdk
+export PATH=$PATH:$ANDROID_HOME/emulator
+export PATH=$PATH:$ANDROID_HOME/platform-tools
