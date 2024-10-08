@@ -32,6 +32,7 @@ See http://brandon.invergo.net/news/2012-05-26-using-gnu-stow-to-manage-your-dot
     $ stow vim
     $ stow irb
     $ stow nvim
+    $ stow obsidian
     $ # install latest node version and set to global in nodenv
     $ curl -fLo ~/.vim/autoload/plug.vim --create-dirs \
         https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
