@@ -134,8 +134,8 @@ BASE16_SHELL="$HOME/.config/base16-shell/"
     [ -s "$BASE16_SHELL/profile_helper.sh" ] && \
         eval "$("$BASE16_SHELL/profile_helper.sh")"
 
-BASE16_SHELL="$HOME/.config/base16-shell/base16-solarized.light.sh"
-[[ -s $BASE16_SHELL ]] && source $BASE16_SHELL
+# BASE16_SHELL="$HOME/.config/base16-shell/base16-solarized.light.sh"
+# [[ -s $BASE16_SHELL ]] && source $BASE16_SHELL
 
 # Make less work with RAW ASCII colors
 # from http://blog.0x1fff.com/2009/11/linux-tip-color-enabled-pager-less.html
