@@ -45,4 +45,33 @@ See http://brandon.invergo.net/news/2012-05-26-using-gnu-stow-to-manage-your-dot
  - [ ] only run rubocop pre-commit hook when rb files are being committed
  - [ ] switch to neovim??
  - [ ] add copilot vim integration
-
+ - [ ] update for linux
+        Tapped 1 command (108 files, 2.8MB).
+        Installing pure
+        Installing stow
+        Installing rbenv
+        Installing nodenv
+        Installing readline
+        Installing vim
+        Installing git
+        Installing zsh
+        Installing tmux
+        Skipping reattach-to-user-namespace (no bottle for Linux)
+        Installing fzf
+        Installing gh
+        Installing ripgrep
+        Installing adr-tools
+        Installing git-delta
+        Installing direnv
+        Installing exiftool
+        Installing imagemagick
+        Installing ctags
+        Installing neovim
+        Skipping ical-buddy (no bottle for Linux)
+        Installing git-lfs
+        Installing neomutt
+        Installing urlview
+        Installing notmuch
+        Installing offlineimap
+        Installing msmtp
+        Homebrew Bundle complete! 25 Brewfile dependencies now installed.
