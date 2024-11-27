@@ -10,6 +10,14 @@ export ZSH="$HOME/.oh-my-zsh"
 # See https://github.com/ohmyzsh/ohmyzsh/wiki/Themes
 ZSH_THEME=""
 
+# Check if system is Linux/Ubuntu
+if [[ $(uname) == "Linux" ]]; then
+    # Ubuntu/Linux specific settings here
+
+    # Homebrew on linux
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+    export PATH=$HOME/.local/bin:$PATH
+fi
 
 # Trying out pure, https://github.com/sindresorhus/pure
 fpath+=("$(brew --prefix)/share/zsh/site-functions")
@@ -235,3 +243,6 @@ export PATH=$PATH:$HOME/.maestro/bin
 export ANDROID_HOME=$HOME/Library/Android/sdk
 export PATH=$PATH:$ANDROID_HOME/emulator
 export PATH=$PATH:$ANDROID_HOME/platform-tools
+
+
+
