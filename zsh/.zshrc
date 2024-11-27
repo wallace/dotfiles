@@ -99,7 +99,7 @@ source $ZSH/oh-my-zsh.sh
 # else
 #   export EDITOR='mvim'
 # fi
-export EDITOR=`which vim`
+export EDITOR=`which nvim`
 
 # Compilation flags
 # export ARCHFLAGS="-arch x86_64"
