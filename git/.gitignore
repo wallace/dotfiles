@@ -21,3 +21,4 @@ screenrc
 tags
 tmp/
 vendor/plugins/acts_as_appointable/test/acts_as_appointable_plugin.sqlite3.db
+_site/
