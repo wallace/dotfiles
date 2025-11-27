@@ -1,0 +1,120 @@
+# Windows-specific gitconfig for Jonathan R. Wallace
+# Copy this to ~/.gitconfig or include it from your main gitconfig
+
+[user]
+	name = Jonathan R. Wallace
+	email = jonathan.wallace@gmail.com
+
+[color]
+	diff = auto
+	status = auto
+	branch = auto
+	interactive = auto
+	ui = true
+
+[alias]
+	# These work on Windows
+	ds = diff --staged --color-moved
+	st = status
+	ci = commit -v
+	co = checkout
+	lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative --color-moved
+
+	# Windows-compatible branch switcher using fzf (requires fzf installed)
+	# Install fzf: winget install fzf
+	br = !git branch --format='%(refname:short)' | fzf +m --preview 'git show --color=always {}' | xargs git checkout
+
+	# Simplified versions that work without shell scripts
+	recent = branch --sort=-committerdate --format='%(refname:short)'
+	branches = branch -a
+
+	# These require Git Bash or WSL - commented out for pure Windows
+	# pr = !sh -c 'git log $0..next-release --ancestry-path --merges --oneline | tail -1'
+	# find-merge = "!sh -c 'commit=$0 && branch=${1:-HEAD} && (git rev-list $commit..$branch --ancestry-path | cat -n; git rev-list $commit..$branch --first-parent | cat -n) | sort -k2 -s | uniq -f1 -d | sort -n | tail -1 | cut -f2'"
+	# show-merge = "!sh -c 'merge=$(git find-merge $0 $1) && [ -n \"$merge\" ] && git show $merge'"
+
+[core]
+	# Windows-appropriate settings
+	excludesfile = ~/.gitignore
+	autocrlf = true
+	editor = code --wait
+	# Uncomment if you install delta: winget install dandavison.delta
+	# pager = delta --light
+
+[apply]
+	whitespace = nowarn
+
+[pack]
+	threads = 0
+
+[diff]
+	renamelimit = 0
+	compaction-heuristic = true
+	noprefix = true
+
+[github]
+	user = wallace
+
+[init]
+	defaultBranch = main
+
+[rerere]
+	enabled = true
+
+[mergetool]
+	prompt = false
+	keepBackup = false
+
+[mergetool "vscode"]
+	cmd = code --wait --merge $REMOTE $LOCAL $BASE $MERGED
+
+[push]
+	default = simple
+
+[pull]
+	default = current
+	rebase = merges
+
+[rebase]
+	autostash = true
+	autosquash = true
+
+[stash]
+	showPatch = true
+
+[color "diff-highlight"]
+	oldNormal = red bold
+	oldHighlight = red bold 52
+	newNormal = green bold
+	newHighlight = green bold 22
+
+[color "diff"]
+	meta = 11
+	frag = magenta bold
+	commit = yellow bold
+	old = red bold
+	new = green bold
+	whitespace = red reverse
+
+[filter "lfs"]
+	required = true
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+
+[credential]
+	helper = "C:/Program Files/1Password/app/8/op-ssh-sign.exe"
+
+# 1Password SSH agent - uncomment if using SSH keys from 1Password
+# [core]
+# 	sshCommand = "C:/Program Files/1Password/app/8/op-ssh-sign.exe"
+
+[gpg]
+	format = ssh
+
+[gpg "ssh"]
+	program = "C:/Program Files/1Password/app/8/op-ssh-sign.exe"
+
+# Uncomment and set your signing key from 1Password
+# [user]
+# 	signingkey = ssh-ed25519 AAAA...
