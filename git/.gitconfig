@@ -61,6 +61,8 @@
   path = ~/.gitconfig-mac
 [includeIf "gitdir:/home"]
   path = ~/.gitconfig-linux
+[includeIf "gitdir:C:/"]
+  path = ~/.gitconfig-windows
 [include]
   path = ~/.dotoverrides/gitconfig
 [color "diff-highlight"]
