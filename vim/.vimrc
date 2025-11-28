@@ -12,8 +12,8 @@ call plug#begin('~/.vim/plugged')
 Plug 'vim-scripts/AnsiEsc.vim'
 Plug 'Townk/vim-autoclose'
 Plug 'chriskempson/base16-vim'
-Plug 'tpope/vim-bundler' " path and tags includes gems from Bundle file
-Plug 'github/copilot.vim'
+Plug 'tpope/vim-bundler', { 'for': 'ruby' } " path and tags includes gems from Bundle file
+Plug 'github/copilot.vim', { 'on': [] } " Lazy-loaded on InsertEnter
 Plug 'chrisbra/csv.vim'
 Plug 'Lokaltog/vim-easymotion'
 Plug 'tpope/vim-endwise'
@@ -29,15 +29,15 @@ Plug 'nathanaelkane/vim-indent-guides'
 Plug 'itchyny/lightline.vim'
 Plug 'wallace/vim-matchit'
 Plug 'scrooloose/nerdcommenter'
-Plug 'scrooloose/nerdtree'
+Plug 'scrooloose/nerdtree', { 'on': ['NERDTree', 'NERDTreeToggle', 'NERDTreeFind'] }
 Plug 'tpope/vim-rake'
 Plug 'tpope/vim-rails'
 Plug 'thoughtbot/vim-rspec'
 Plug 'danro/rename.vim'
 Plug 'tpope/vim-repeat'
 Plug 'tpope/vim-rhubarb'
-Plug 'vim-ruby/vim-ruby'
-Plug 'ecomba/vim-ruby-refactoring'
+Plug 'vim-ruby/vim-ruby', { 'for': 'ruby' }
+Plug 'ecomba/vim-ruby-refactoring', { 'for': 'ruby' }
 Plug 'jremmen/vim-ripgrep'
 Plug 'slim-template/vim-slim'
 Plug 'wallace/snipmate.vim'
@@ -45,19 +45,25 @@ Plug 'ervandew/supertab'
 Plug 'tpope/vim-surround'
 Plug 'godlygeek/tabular'
 Plug 'janko-m/vim-test'
-Plug 'kana/vim-textobj-user'
-Plug 'nelstrom/vim-textobj-rubyblock'
+Plug 'kana/vim-textobj-user', { 'for': 'ruby' }
+Plug 'nelstrom/vim-textobj-rubyblock', { 'for': 'ruby' }
 Plug 'christoomey/vim-tmux-navigator'
 Plug 'duwanis/tomdoc.vim'
 Plug 'tpope/vim-unimpaired'
 Plug 'benmills/vimux'
 Plug 'mattn/webapi-vim'
 Plug 'mbbill/undotree'
-Plug 'neoclide/coc.nvim', {'branch': 'release'}
+Plug 'neoclide/coc.nvim', {'branch': 'release', 'on': []} " Lazy-loaded on InsertEnter
 Plug 'Cian911/vim-cadence'
 Plug 'ojroques/vim-oscyank'
 
 call plug#end()
+
+" Lazy-load coc.nvim and copilot on first insert
+augroup lazy_load_plugins
+  autocmd!
+  autocmd InsertEnter * ++once call plug#load('coc.nvim', 'copilot.vim')
+augroup END
 
 """" Custom Configs include.
 "" All custom config settings are stored in the .vim/config folder to
