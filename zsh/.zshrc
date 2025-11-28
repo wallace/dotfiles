@@ -2,6 +2,7 @@ export ZSH="$HOME/.oh-my-zsh"
 
 # Consolidate all PATH exports at the beginning
 export PATH="$HOME/.local/bin:$PATH"
+export PATH="$HOME/.rbenv/shims:$PATH"
 export PATH="/opt/homebrew/opt/mysql@5.7/bin:$PATH"
 export PATH="/opt/homebrew/opt/postgresql@15/bin:$PATH"
 export GOPATH="$HOME/go"
