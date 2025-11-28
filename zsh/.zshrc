@@ -111,5 +111,14 @@ export COMPOSE_PROFILES="tourneys,frontend"
 # Source codespaces related things if we are in one
 [ -n "$CODESPACES" ] && source ${ZSHDIR}/codespaces.zsh
 
+# Windows SSH Agent bridge (WSL2 only)
+if [[ $(uname -r) == *"WSL2"* ]]; then
+    export SSH_AUTH_SOCK="$HOME/.ssh/agent.sock"
+    NPIPERELAY="/mnt/c/Users/jonat/go/bin/npiperelay.exe"
 
-
+    if ! ss -a 2>/dev/null | grep -q "$SSH_AUTH_SOCK"; then
+        mkdir -p "$(dirname $SSH_AUTH_SOCK)"
+        rm -f "$SSH_AUTH_SOCK"
+        (setsid socat UNIX-LISTEN:"$SSH_AUTH_SOCK",fork EXEC:"$NPIPERELAY -ei -s //./pipe/openssh-ssh-agent" &) >/dev/null 2>&1
+    fi
+fi
