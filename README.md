@@ -22,6 +22,25 @@ See http://brandon.invergo.net/news/2012-05-26-using-gnu-stow-to-manage-your-dot
     $ brew bundle # installs all things listed in Brewfile
     $ # Note: reattach-to-user-namespace and ical-buddy are macOS-only and will be skipped
 
+#### Windows (Native)
+
+For native Windows usage (not WSL), you can use the git configuration directly:
+
+    > # Install Git for Windows if not already installed
+    > winget install Git.Git
+    > # Install GitHub CLI for credential handling
+    > winget install GitHub.cli
+    > gh auth login
+    > # Copy git config to user home directory
+    > copy git\.gitconfig %USERPROFILE%\.gitconfig
+    > copy git\.gitconfig-windows %USERPROFILE%\.gitconfig-windows
+    > # Create vim backup directory
+    > mkdir %USERPROFILE%\.vim-tmp
+
+Optional tools:
+    > winget install dandavison.delta  # Better diff viewer
+    > winget install junegunn.fzf      # Fuzzy finder for branch switching
+
 #### All Platforms
 
     $ # set up oh-my-zsh
@@ -66,6 +85,14 @@ The following packages are only installed on macOS (no Linux bottles available):
 ### WSL2 / Linux considerations
 - Ensure brew is in your PATH by adding `eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"` to your shell profile
 - tmux copy/paste works differently on Linux; `reattach-to-user-namespace` is not needed
+
+### Windows (Native) considerations
+- The git configuration uses conditional includes (`includeIf`) to load platform-specific settings
+- On Windows, `.gitconfig-windows` is automatically included when working in paths starting with `C:/`
+- Uses VS Code as the default editor and merge tool
+- GitHub CLI (`gh`) handles credential management
+- Some shell-based aliases (like `find-merge`, `show-merge`) require Git Bash or WSL
+- Line endings are set to `autocrlf = true` for Windows compatibility
 
 ## TODOs
 
