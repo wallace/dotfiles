@@ -1,3 +1,4 @@
+# Core tools (cross-platform)
 brew "pure"
 brew "stow"
 brew "rbenv"
@@ -7,7 +8,6 @@ brew "vim"
 brew "git"
 brew "zsh"
 brew "tmux"
-brew "reattach-to-user-namespace"
 brew "fzf"
 brew "gh"
 brew "ripgrep"
@@ -20,9 +20,6 @@ brew "imagemagick"
 brew "ctags"
 brew "neovim"
 
-# https://github.com/zerowidth/zoom-calendar.alfredworkflow
-brew "ical-buddy"
-
 # github sql primer
 brew "git-lfs"
 
@@ -32,3 +29,11 @@ brew "urlview"
 brew "notmuch"
 brew "offlineimap"
 brew "msmtp"
+
+# macOS only (no Linux bottles available)
+if OS.mac?
+  # Required for tmux copy/paste on macOS
+  brew "reattach-to-user-namespace"
+  # https://github.com/zerowidth/zoom-calendar.alfredworkflow
+  brew "ical-buddy"
+end
