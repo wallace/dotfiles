@@ -96,7 +96,5 @@ The following packages are only installed on macOS (no Linux bottles available):
 
 ## TODOs
 
- - [ ] only run rubocop pre-commit hook when rb files are being committed
  - [ ] switch to neovim??
  - [ ] add copilot vim integration
- - [x] update for linux
