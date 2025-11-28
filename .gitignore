@@ -1,0 +1,6 @@
+# Vim plugins (managed by vim-plug)
+vim/.vim/plugged/
+vim/.vim/autoload/plug.vim
+
+# Profiling
+startup.log
