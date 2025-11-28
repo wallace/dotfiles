@@ -40,6 +40,7 @@
 	renamelimit = 0
 	compaction-heuristic = true
 	noprefix = true
+	tool = p4mergetool
 [github]
 	user = wallace
 	;token = <token_here>
@@ -51,7 +52,7 @@
 	enabled = true
 [mergetool]
   prompt = false
-  keepBackup = false
+	keepBackup = false
 [mergetool "meld"]
   cmd = $HOME/bin/meldmerge $BASE $LOCAL $REMOTE $MERGED
 [push]
@@ -97,3 +98,10 @@
 [credential "https://gist.github.com"]
 	helper = 
 	helper = !/home/linuxbrew/.linuxbrew/bin/gh auth git-credential
+[merge]
+	tool = p4mergetool
+[mergetool "p4mergetool"]
+	cmd = /Applications/p4merge.app/Contents/Resources/launchp4merge $PWD/$BASE $PWD/$REMOTE $PWD/$LOCAL $PWD/$MERGED
+	trustExitCode = false
+[difftool "p4mergetool"]
+	cmd = /Applications/p4merge.app/Contents/Resources/launchp4merge $LOCAL $REMOTE

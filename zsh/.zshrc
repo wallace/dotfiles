@@ -1,3 +1,4 @@
+zmodload zsh/zprof
 export ZSH="$HOME/.oh-my-zsh"
 
 # Consolidate all PATH exports at the beginning
@@ -34,6 +35,10 @@ plugins=(git)
 
 source $ZSH/oh-my-zsh.sh
 
+# Set a larger history size (after oh-my-zsh loads)
+HISTSIZE=200000
+SAVEHIST=200000
+
 # Lazy load nvm
 export NVM_DIR="$HOME/.nvm"
 nvm() {
@@ -42,19 +47,21 @@ nvm() {
     nvm "$@"
 }
 
-# Lazy load nodenv
-nodenv() {
-    unset -f nodenv
-    eval "$(nodenv init -)"
-    nodenv "$@"
-}
+eval "$(nodenv init -)"
+## Lazy load nodenv
+#nodenv() {
+#    unset -f nodenv
+#    eval "$(nodenv init -)"
+#    nodenv "$@"
+#}
 
-# Lazy load rbenv
-rbenv() {
-    unset -f rbenv
-    eval "$(rbenv init -)"
-    rbenv "$@"
-}
+eval "$(rbenv init -)"
+## Lazy load rbenv
+#rbenv() {
+#    unset -f rbenv
+#    eval "$(rbenv init -)"
+#    rbenv "$@"
+#}
 
 # Lazy load pyenv
 pyenv() {
@@ -124,3 +131,45 @@ if [[ $(uname -r) == *"WSL2"* ]]; then
         (setsid socat UNIX-LISTEN:"$SSH_AUTH_SOCK",fork EXEC:"$NPIPERELAY -ei -s //./pipe/openssh-ssh-agent" &) >/dev/null 2>&1
     fi
 fi
+
+# SSH Agent configuration (macOS/Linux)
+if [ -z "$SSH_AUTH_SOCK" ]; then
+   # Check for a currently running instance of the agent
+   RUNNING_AGENT="`ps -ax | grep 'ssh-agent -s' | grep -v grep | wc -l | tr -d '[:space:]'`"
+   if [ "$RUNNING_AGENT" = "0" ]; then
+        # Launch a new instance of the agent
+        ssh-agent -s &> $HOME/.ssh/ssh-agent
+   fi
+   eval `cat $HOME/.ssh/ssh-agent`
+fi
+
+# bun completions
+[ -s "/Users/jonathanwallace/.bun/_bun" ] && source "/Users/jonathanwallace/.bun/_bun"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+export DOTNET_ROOT="/opt/homebrew/opt/dotnet/libexec"
+zprof
+export PATH="/opt/homebrew/opt/postgresql@18/bin:$PATH"
+
+# Git rebase function - checkout main, pull, checkout branch, rebase main, and force push
+grebase() {
+    if [ -z "$1" ]; then
+        echo "Usage: grebase <branch-name>"
+        echo "Example: grebase wallace/axts-9-display-pain-level-in-web"
+        return 1
+    fi
+
+    local branch="$1"
+    echo "🔄 Checking out main..."
+    git co main && \
+    echo "⬇️  Pulling latest changes..." && \
+    git pull && \
+    echo "🔄 Checking out branch: $branch..." && \
+    git co "$branch" && \
+    echo "🔀 Rebasing $branch onto main..." && \
+    git rebase main && \
+    echo "⬆️  Force pushing..." && \
+    ggfl
+}
