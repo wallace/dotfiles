@@ -23,6 +23,15 @@
 	autocrlf = input
 	pager = delta --light
 	editor = vim
+	# Performance optimizations for WSL2
+	fscache = true
+	preloadIndex = true
+	fileMode = false
+	untrackedCache = true
+[feature]
+	manyFiles = true
+[index]
+	threads = true
 [apply]
 	whitespace = nowarn
 [pack]
