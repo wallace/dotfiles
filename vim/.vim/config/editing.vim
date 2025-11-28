@@ -84,3 +84,5 @@ map <Leader>sx :%s/\s\+$//<CR>
 " Trying some mappings for https://github.com/ojroques/vim-oscyank
 vnoremap <leader>y :OSCYank<CR>
 nmap <leader>o <Plug>OSCYank
+
+autocmd BufWritePre * :%s/\s\+$//e

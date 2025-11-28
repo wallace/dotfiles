@@ -1,1 +1,2 @@
-Not Found
+#!/bin/sh
+exec yt-dlp "$@"
