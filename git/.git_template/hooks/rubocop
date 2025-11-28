@@ -1,16 +1,23 @@
 #!/bin/sh
 
+# Get list of staged Ruby files
+STAGED_RB_FILES=$(git diff --cached --name-only --relative --diff-filter=ACMR | grep '\.rb$')
+
+# Exit early if no Ruby files are staged
+if [ -z "$STAGED_RB_FILES" ]; then
+  exit 0
+fi
+
 # Checks if any staged files have unstaged changes otherwise rubocop isn't running on what is actually going to be committed.
 WARN_FILES=$(git diff-files --stat -- $(git diff-index HEAD --name-only --cached))
-if [[ -n $WARN_FILES ]]
-then
+if [ -n "$WARN_FILES" ]; then
   echo 'There are unstaged changes to files (git stash --keep-index to commit safely):'
   echo "$WARN_FILES\n"
   exit 1
 fi
 
 echo "Running rubocop..."
-exec git diff --cached --name-only --relative --diff-filter=ACMR | xargs \
+echo "$STAGED_RB_FILES" | xargs \
   rubocop --force-exclusion \
           --autocorrect-all --fail-level A \
           --format simple \
