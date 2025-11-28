@@ -19,8 +19,12 @@ fi
 
 ZSH_THEME=""
 
-# Pure prompt setup with cached brew prefix
-fpath+=("/opt/homebrew/share/zsh/site-functions")
+# Pure prompt setup
+if [[ $(uname) == "Linux" ]]; then
+    fpath+=("/home/linuxbrew/.linuxbrew/share/zsh/site-functions")
+else
+    fpath+=("/opt/homebrew/share/zsh/site-functions")
+fi
 autoload -U promptinit; promptinit
 prompt pure
 
@@ -57,12 +61,10 @@ pyenv() {
     pyenv "$@"
 }
 
-# Lazy load direnv
-direnv() {
-    unset -f direnv
-    eval "$(direnv hook $SHELL)"
-    direnv "$@"
-}
+# direnv (cannot be lazy loaded - needs to hook every prompt)
+if command -v direnv &> /dev/null; then
+    eval "$(direnv hook zsh)"
+fi
 
 export EDITOR=`which nvim`
 
