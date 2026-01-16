@@ -24,22 +24,51 @@ See http://brandon.invergo.net/news/2012-05-26-using-gnu-stow-to-manage-your-dot
 
 #### Windows (Native)
 
-For native Windows usage (not WSL), you can use the git configuration directly:
+For native Windows usage (not WSL), you can use the git configuration directly.
 
-    > # Install Git for Windows if not already installed
-    > winget install Git.Git
-    > # Install GitHub CLI for credential handling
-    > winget install GitHub.cli
-    > gh auth login
-    > # Copy git config to user home directory
-    > copy git\.gitconfig %USERPROFILE%\.gitconfig
-    > copy git\.gitconfig-windows %USERPROFILE%\.gitconfig-windows
-    > # Create vim backup directory
-    > mkdir %USERPROFILE%\.vim-tmp
+Run these commands in PowerShell:
+
+    # Install Git for Windows if not already installed
+    winget install Git.Git
+
+    # Install GitHub CLI for credential handling
+    winget install GitHub.cli
+    gh auth login
+
+    # Navigate to the dotfiles directory
+    cd path\to\dotfiles
+
+    # Copy git config to user home directory
+    # Remove existing files if they exist (handles symlinks/junctions)
+    Remove-Item $env:USERPROFILE\.gitconfig -Force -ErrorAction SilentlyContinue
+    Remove-Item $env:USERPROFILE\.gitconfig-windows -Force -ErrorAction SilentlyContinue
+    Copy-Item .\git\.gitconfig $env:USERPROFILE\.gitconfig
+    Copy-Item .\git\.gitconfig-windows $env:USERPROFILE\.gitconfig-windows
+
+    # Create vim backup directory
+    New-Item -ItemType Directory -Force -Path $env:USERPROFILE\.vim-tmp
 
 Optional tools:
-    > winget install dandavison.delta  # Better diff viewer
-    > winget install junegunn.fzf      # Fuzzy finder for branch switching
+
+    winget install dandavison.delta  # Better diff viewer
+    winget install junegunn.fzf      # Fuzzy finder for branch switching
+
+PowerShell setup (zsh-like experience):
+
+    # Install Oh-My-Posh for prompt theming
+    winget install JanDeDobbeleer.OhMyPosh
+
+    # Install PowerShell modules (no admin rights required with -Scope CurrentUser)
+    Install-Module PSReadLine -Scope CurrentUser -Force
+    Install-Module Terminal-Icons -Scope CurrentUser -Repository PSGallery -Force
+    Install-Module PSFzf -Scope CurrentUser -Repository PSGallery -Force
+    Install-Module posh-git -Scope CurrentUser -Force
+    Install-Module z -Scope CurrentUser -Force
+
+    # Install PowerShell profile using hardlink (from the dotfiles directory)
+    # Note: Hardlinks work like symlinks but don't require admin privileges
+    New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\Documents\PowerShell"
+    New-Item -ItemType HardLink -Path "$env:USERPROFILE\Documents\PowerShell\Microsoft.PowerShell_profile.ps1" -Target "$PWD\powershell\Documents\PowerShell\Microsoft.PowerShell_profile.ps1" -Force
 
 #### All Platforms
 
