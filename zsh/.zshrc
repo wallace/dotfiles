@@ -118,7 +118,7 @@ export GEOS_LIBRARY_PATH=/opt/homebrew/lib
 export COMPOSE_PROFILES="tourneys,frontend"
 
 # Source codespaces related things if we are in one
-[ -n "$CODESPACES" ] && source ${ZSHDIR}/codespaces.zsh
+[ -n "$CODESPACES" ] && source $HOME/.zsh/codespaces.zsh
 
 # Windows SSH Agent bridge (WSL2 only)
 if [[ $(uname -r) == *"WSL2"* ]]; then
