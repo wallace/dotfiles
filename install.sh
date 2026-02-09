@@ -48,6 +48,9 @@ if [ "$CODESPACES" == "true" ]; then
     rm -f ~/.zshrc  # remove OMZ default before stow
   fi
 
+  fancy_echo "Configuring rvm to auto-install Ruby versions"
+  echo "rvm_autoinstall_on_use_flag=1" >> "$HOME/.rvmrc"
+
   fancy_echo "Installing dotfiles"
   mv $HOME/.gitconfig $HOME/.gitconfig.old 2>/dev/null || true
   mv $HOME/.zshrc $HOME/.zshrc.old 2>/dev/null || true
