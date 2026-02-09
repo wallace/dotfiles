@@ -1,6 +1,9 @@
 #!/bin/bash
 # https://docs.github.com/en/codespaces/customizing-your-codespace/personalizing-codespaces-for-your-account
 
+# Configuration
+GIT_EMAIL="${CODESPACE_GIT_EMAIL:-jonathan.wallace@gmail.com}"
+
 # let's have our own log
 exec > >(tee -i $HOME/dotfiles_install.log)
 exec 2>&1
@@ -11,10 +14,6 @@ fancy_echo() {
 
   # shellcheck disable=SC2059
   printf "\\n$fmt\\n" "$@"
-}
-
-get() {
-  curl -fLo $1 --create-dirs $2
 }
 
 # default to codespace user
@@ -32,20 +31,28 @@ if [ "$CODESPACES" == "true" ]; then
   # set up org specific overrides
   fancy_echo "Installing GitHub codespace related dotoverrides configs..."
   mkdir -p "/home/$USER/.dotoverrides"
-  echo -e "[user]\n  email = wallace@github.com" >> "/home/$USER/.dotoverrides/gitconfig"
+  echo -e "[user]\n  email = ${GIT_EMAIL}" >> "/home/$USER/.dotoverrides/gitconfig"
 
-  fancy_echo "In codespaces! Installing apt-get packages"
-  sudo apt-get -y install fzf universal-ctags zsh-autosuggestions stow
+  fancy_echo "Installing Homebrew"
+  if ! command -v brew &> /dev/null; then
+    NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+  fi
 
-  fancy_echo "Installing git-delta"
-  wget https://github.com/dandavison/delta/releases/download/0.8.3/git-delta_0.8.3_amd64.deb
-  sudo dpkg -i git-delta_0.8.3_amd64.deb
+  fancy_echo "Installing packages via Homebrew"
+  brew install fzf universal-ctags zsh-autosuggestions stow git-delta ripgrep pure direnv
+
+  fancy_echo "Installing Oh-My-Zsh"
+  if [ ! -d "$HOME/.oh-my-zsh" ]; then
+    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+    rm -f ~/.zshrc  # remove OMZ default before stow
+  fi
 
   fancy_echo "Installing dotfiles"
-  mv $HOME/.gitconfig $HOME/.gitconfig.old # let's use mine
-  mv $HOME/.zshrc $HOME/.zshrc.old         # let's use mine
+  mv $HOME/.gitconfig $HOME/.gitconfig.old 2>/dev/null || true
+  mv $HOME/.zshrc $HOME/.zshrc.old 2>/dev/null || true
 
-  locals=( "vim" "ruby_debugger" "git" "readline" "tmux" "zsh" "base16-shell" )
+  locals=( "vim" "ruby_debugger" "git" "readline" "tmux" "zsh" "base16-shell" "scripts" "irb" "rspec" "rubygems" )
   for i in "${locals[@]}"
   do
     stow -t $HOME $i
@@ -58,20 +65,17 @@ if [ "$CODESPACES" == "true" ]; then
     curl -fLo "$HOME"/.vim/autoload/plug.vim --create-dirs \
       https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
   fi
-  mkdir ~/.vim-tmp # add vim backup directory to prevent errors like https://stackoverflow.com/questions/8428210/cannot-create-backup-fileadd-to-overwrite
+  mkdir -p ~/.vim-tmp # add vim backup directory to prevent errors like https://stackoverflow.com/questions/8428210/cannot-create-backup-fileadd-to-overwrite
   vim +PlugUpdate +PlugClean! +qa
-
-  #fancy_echo "Sourcing aliases"
-  #[[ -f ~/.aliases ]] && source ~/.aliases
-  #echo "alias g='git'" >> "$HOME"/.bashrc
-  #echo "export EDITOR=vim" >> "$HOME"/.bashrc
 
   fancy_echo "Installing gems"
   sudo gem install git_remote_branch ripper-tags && ripper-tags -R --exclude=vendor
 
   # Run pre-push git commit hook to check code owners
-  echo "Setting up commit hook for codeowners"
-  cd /workspaces/github && ln -s $(pwd)/script/git-hooks/pre-push .git/hooks/pre-push
+  if [ -d "/workspaces/github" ]; then
+    echo "Setting up commit hook for codeowners"
+    cd /workspaces/github && ln -s $(pwd)/script/git-hooks/pre-push .git/hooks/pre-push
+  fi
 
   fancy_echo "All done"
 else

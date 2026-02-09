@@ -123,6 +123,26 @@ The following packages are only installed on macOS (no Linux bottles available):
 - Some shell-based aliases (like `find-merge`, `show-merge`) require Git Bash or WSL
 - Line endings are set to `autocrlf = true` for Windows compatibility
 
+### GitHub Codespaces
+
+This repo is configured as a [personal dotfiles repo for Codespaces](https://docs.github.com/en/codespaces/customizing-your-codespace/personalizing-codespaces-for-your-account).
+
+1. Go to **Settings > Codespaces > Dotfiles** and select this repository
+2. `install.sh` runs automatically when a Codespace is created
+
+The install script will:
+- Switch the default shell to zsh and install Oh-My-Zsh
+- Install tools via Homebrew (fzf, ctags, delta, ripgrep, etc.)
+- Stow dotfiles for vim, git, zsh, tmux, and more
+- Install vim plugins and Ruby gems
+
+To override the default git email, set the `CODESPACE_GIT_EMAIL` environment variable in your
+[Codespaces secrets](https://github.com/settings/codespaces). Otherwise it defaults to `jonathan.wallace@gmail.com`.
+
+To create a new Codespace from the CLI:
+
+    $ scripts/bin/new-codespace.sh <branch>
+
 ## TODOs
 
  - [ ] switch to neovim??
