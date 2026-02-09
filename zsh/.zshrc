@@ -55,13 +55,12 @@ eval "$(nodenv init -)"
 #    nodenv "$@"
 #}
 
-eval "$(rbenv init -)"
-## Lazy load rbenv
-#rbenv() {
-#    unset -f rbenv
-#    eval "$(rbenv init -)"
-#    rbenv "$@"
-#}
+# Use rvm in Codespaces, rbenv everywhere else
+if [ -n "$CODESPACES" ]; then
+    [[ -s "$HOME/.rvm/scripts/rvm" ]] && source "$HOME/.rvm/scripts/rvm"
+else
+    eval "$(rbenv init -)"
+fi
 
 # Lazy load pyenv
 pyenv() {
