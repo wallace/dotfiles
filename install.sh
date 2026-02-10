@@ -71,6 +71,9 @@ if [ "$CODESPACES" == "true" ]; then
   mkdir -p ~/.vim-tmp # add vim backup directory to prevent errors like https://stackoverflow.com/questions/8428210/cannot-create-backup-fileadd-to-overwrite
   vim +PlugUpdate +PlugClean! +qa
 
+  fancy_echo "Installing Claude Code"
+  npm install -g @anthropic-ai/claude-code
+
   fancy_echo "Installing gems"
   sudo gem install git_remote_branch ripper-tags && ripper-tags -R --exclude=vendor
 
