@@ -40,7 +40,7 @@ if [ "$CODESPACES" == "true" ]; then
   fi
 
   fancy_echo "Installing packages via Homebrew"
-  brew install fzf universal-ctags zsh-autosuggestions stow git-delta ripgrep pure direnv
+  brew install fzf universal-ctags zsh-autosuggestions stow git-delta ripgrep pure direnv tmux
 
   fancy_echo "Installing Oh-My-Zsh"
   if [ ! -d "$HOME/.oh-my-zsh" ]; then
