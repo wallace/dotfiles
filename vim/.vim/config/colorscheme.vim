@@ -5,4 +5,4 @@ syntax enable
 set background=light
 
 " Use the solarized colorscheme.
-colorscheme base16-solarized-dark
+silent! colorscheme base16-solarized-dark
