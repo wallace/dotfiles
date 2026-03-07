@@ -15,8 +15,8 @@ export PATH="$PATH:$HOME/.maestro/bin"
 export ANDROID_HOME=$HOME/Library/Android/sdk
 export PATH="$PATH:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools"
 
-# Check if system is Linux/Ubuntu
-if [[ $(uname) == "Linux" ]]; then
+# Check if system is Linux/Ubuntu (only init brew if installed)
+if [[ $(uname) == "Linux" ]] && [ -x "/home/linuxbrew/.linuxbrew/bin/brew" ]; then
     eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 fi
 
@@ -24,7 +24,9 @@ ZSH_THEME=""
 
 # Pure prompt setup
 if [[ $(uname) == "Linux" ]]; then
-    fpath+=("/home/linuxbrew/.linuxbrew/share/zsh/site-functions")
+    [ -d "/home/linuxbrew/.linuxbrew/share/zsh/site-functions" ] \
+        && fpath+=("/home/linuxbrew/.linuxbrew/share/zsh/site-functions")
+    [ -d "$HOME/.zsh/pure" ] && fpath+=("$HOME/.zsh/pure")
 else
     fpath+=("/opt/homebrew/share/zsh/site-functions")
 fi
