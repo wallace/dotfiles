@@ -33,18 +33,26 @@ if [ "$CODESPACES" == "true" ]; then
   mkdir -p "/home/$USER/.dotoverrides"
   echo -e "[user]\n  email = ${GIT_EMAIL}" >> "/home/$USER/.dotoverrides/gitconfig"
 
-  fancy_echo "Installing Homebrew"
-  if ! command -v brew &> /dev/null; then
-    NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+  fancy_echo "Installing packages via apt"
+  sudo apt-get update -qq
+  sudo apt-get install -y -q fzf stow ripgrep direnv tmux zsh universal-ctags zsh-autosuggestions
+
+  if ! command -v delta &>/dev/null; then
+    fancy_echo "Installing git-delta"
+    DELTA_DEB_URL=$(curl -fsSL "https://api.github.com/repos/dandavison/delta/releases/latest" \
+      | grep "browser_download_url.*amd64.deb" | cut -d '"' -f 4)
+    curl -fsSL "$DELTA_DEB_URL" -o /tmp/git-delta.deb
+    sudo dpkg -i /tmp/git-delta.deb && rm /tmp/git-delta.deb
   fi
 
-  fancy_echo "Installing packages via Homebrew"
-  brew install fzf universal-ctags zsh-autosuggestions stow git-delta ripgrep pure direnv tmux
+  if [ ! -d "$HOME/.zsh/pure" ]; then
+    fancy_echo "Installing pure prompt"
+    git clone --quiet https://github.com/sindresorhus/pure.git "$HOME/.zsh/pure"
+  fi
 
   fancy_echo "Installing Oh-My-Zsh"
   if [ ! -d "$HOME/.oh-my-zsh" ]; then
-    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended --keep-zshrc
     rm -f ~/.zshrc  # remove OMZ default before stow
   fi
 
@@ -58,7 +66,7 @@ if [ "$CODESPACES" == "true" ]; then
   locals=( "vim" "ruby_debugger" "git" "readline" "tmux" "zsh" "base16-shell" "scripts" "irb" "rspec" "rubygems" )
   for i in "${locals[@]}"
   do
-    stow -t $HOME $i
+    stow -q -t $HOME $i
   done
 
   fancy_echo "Installing vim plugins"
@@ -71,11 +79,10 @@ if [ "$CODESPACES" == "true" ]; then
   mkdir -p ~/.vim-tmp # add vim backup directory to prevent errors like https://stackoverflow.com/questions/8428210/cannot-create-backup-fileadd-to-overwrite
   vim +PlugUpdate +PlugClean! +qa
 
-  fancy_echo "Installing Claude Code"
-  npm install -g @anthropic-ai/claude-code
-
-  fancy_echo "Installing gems"
-  sudo gem install git_remote_branch ripper-tags && ripper-tags -R --exclude=vendor
+  fancy_echo "Installing Claude Code and gems (parallel)"
+  npm install -g @anthropic-ai/claude-code &
+  sudo gem install git_remote_branch ripper-tags &
+  wait
 
   # Run pre-push git commit hook to check code owners
   if [ -d "/workspaces/github" ]; then
