@@ -80,7 +80,9 @@ if [ "$CODESPACES" == "true" ]; then
   vim +PlugUpdate +PlugClean! +qa
 
   fancy_echo "Installing Claude Code and gems (parallel)"
-  npm install -g @anthropic-ai/claude-code &
+  if ! command -v claude &>/dev/null; then
+    curl -fsSL https://claude.ai/install.sh | bash &
+  fi
   sudo gem install git_remote_branch ripper-tags &
   wait
 
