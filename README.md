@@ -83,6 +83,7 @@ PowerShell setup (zsh-like experience):
     $ stow ctags
     $ stow base16-shell
     $ stow git
+    $ stow hammerspoon
     $ stow mutt
     $ stow notmuch
     $ stow offlineimap
