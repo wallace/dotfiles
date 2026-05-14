@@ -19,7 +19,23 @@
 set -euo pipefail
 
 SRC="${1:?usage: $0 <volume-mount-path>}"
-DEST="$HOME/Dropbox/voice-memos/untranscribed"
+
+# Dropbox base — auto-detect. macOS moved Dropbox to ~/Library/CloudStorage/Dropbox
+# a few years back, but plenty of installs still have ~/Dropbox (real path or
+# a backwards-compat symlink). Override with DROPBOX_BASE=... if neither default
+# fits your install.
+if [[ -n "${DROPBOX_BASE:-}" ]]; then
+  : # honor explicit override
+elif [[ -d "$HOME/Dropbox" ]]; then
+  DROPBOX_BASE="$HOME/Dropbox"
+elif [[ -d "$HOME/Library/CloudStorage/Dropbox" ]]; then
+  DROPBOX_BASE="$HOME/Library/CloudStorage/Dropbox"
+else
+  echo "ERROR: no Dropbox base found (tried ~/Dropbox and ~/Library/CloudStorage/Dropbox)" >&2
+  exit 3
+fi
+
+DEST="$DROPBOX_BASE/voice-memos/untranscribed"
 LOG="$HOME/Library/Logs/voice-pipeline.log"
 
 mkdir -p "$DEST"
