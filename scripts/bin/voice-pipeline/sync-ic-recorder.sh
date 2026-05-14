@@ -2,14 +2,23 @@
 #
 # sync-ic-recorder.sh
 #
-# Flat-copy audio files from a Sony IC Recorder volume into the Dropbox
-# watch folder. Idempotent: --ignore-existing means files already present
-# in the destination are skipped, so you can leave recordings on the device
-# across multiple plug-ins without re-syncing them.
+# Pull audio from a Sony IC Recorder volume into the Dropbox watch folder,
+# trimming leading and trailing silence along the way. This shaves
+# transcription time and avoids Whisper hallucinating text in long silent
+# stretches.
 #
-# Files are flattened into a single destination directory regardless of the
-# subfolder structure on the device (Sony uses REC_FILE/FOLDERxx/ on newer
-# models and MSSONY/HVFOLDER/ on older ones — both are handled).
+# Trim thresholds (override via environment if you want to tune):
+#   VOICE_PIPELINE_LEAD_DURATION       leading silence ≥ N seconds (default 1)
+#   VOICE_PIPELINE_TAIL_DURATION       trailing silence ≥ N seconds (default 3)
+#   VOICE_PIPELINE_SILENCE_THRESHOLD   loudness floor for silence (default -40dB)
+#
+# Files are flattened: Sony stores audio in REC_FILE/FOLDERxx/ on newer
+# models and MSSONY/HVFOLDER/ on older ones — both are handled. Idempotent:
+# if a file with the same basename already exists in the destination, it's
+# skipped (you can leave recordings on the device across mounts).
+#
+# Falls back to a plain copy if ffmpeg fails for any reason, so audio always
+# makes it through even when trimming breaks on a weird file.
 #
 # Usage:
 #   sync-ic-recorder.sh <volume-mount-path>
@@ -38,15 +47,28 @@ fi
 DEST="$DROPBOX_BASE/voice-memos/untranscribed"
 LOG="$HOME/Library/Logs/voice-pipeline.log"
 
+LEAD_DURATION="${VOICE_PIPELINE_LEAD_DURATION:-1}"
+TAIL_DURATION="${VOICE_PIPELINE_TAIL_DURATION:-3}"
+SILENCE_THRESHOLD="${VOICE_PIPELINE_SILENCE_THRESHOLD:--40dB}"
+
 mkdir -p "$DEST"
 mkdir -p "$(dirname "$LOG")"
 
 ts() { date "+%Y-%m-%d %H:%M:%S"; }
 
+# Silence-trim filter chain: trim leading silence, reverse, trim what was
+# the trailing silence (now at the start), reverse back. aformat=dblp gives
+# areverse the double-precision sample format it needs.
+FILTER="silenceremove=start_periods=1:start_duration=${LEAD_DURATION}:start_threshold=${SILENCE_THRESHOLD}"
+FILTER+=",aformat=dblp,areverse"
+FILTER+=",silenceremove=start_periods=1:start_duration=${TAIL_DURATION}:start_threshold=${SILENCE_THRESHOLD}"
+FILTER+=",aformat=dblp,areverse"
+
 {
   echo "[$(ts)] === sync start ==="
   echo "[$(ts)] src=$SRC"
   echo "[$(ts)] dest=$DEST"
+  echo "[$(ts)] trim: lead≥${LEAD_DURATION}s, tail≥${TAIL_DURATION}s, threshold=${SILENCE_THRESHOLD}"
 
   if [[ ! -d "$SRC" ]]; then
     echo "[$(ts)] ERROR: source volume not found"
@@ -55,17 +77,32 @@ ts() { date "+%Y-%m-%d %H:%M:%S"; }
 
   processed=0
   copied=0
+  trimmed=0
+  fallback=0
 
   while IFS= read -r -d '' f; do
     processed=$((processed + 1))
-    out=$(rsync -a --ignore-existing --itemize-changes "$f" "$DEST/" 2>&1) || {
-      echo "[$(ts)] WARN: rsync failed for $f"
-      echo "$out"
-      continue
-    }
-    if [[ -n "$out" ]]; then
+    base=$(basename "$f")
+    dest_path="$DEST/$base"
+
+    if [[ -f "$dest_path" ]]; then
+      continue   # idempotent: already processed
+    fi
+
+    if ffmpeg -nostdin -loglevel warning -i "$f" -af "$FILTER" -y "$dest_path" 2>&1; then
+      trimmed=$((trimmed + 1))
       copied=$((copied + 1))
-      echo "[$(ts)] copied: $(basename "$f")"
+      echo "[$(ts)] trimmed: $base"
+    else
+      echo "[$(ts)] WARN: ffmpeg failed for $base — falling back to plain copy"
+      [[ -f "$dest_path" ]] && rm "$dest_path"
+      if cp "$f" "$dest_path"; then
+        fallback=$((fallback + 1))
+        copied=$((copied + 1))
+        echo "[$(ts)] copied (no trim): $base"
+      else
+        echo "[$(ts)] ERROR: copy failed for $base"
+      fi
     fi
   done < <(
     find "$SRC" -type f \( \
@@ -76,7 +113,7 @@ ts() { date "+%Y-%m-%d %H:%M:%S"; }
            -print0
   )
 
-  echo "[$(ts)] processed=$processed new=$copied"
+  echo "[$(ts)] processed=$processed new=$copied trimmed=$trimmed fallback=$fallback"
   echo "[$(ts)] === sync ok ==="
 } >> "$LOG" 2>&1
 
