@@ -2,16 +2,24 @@
 #
 # cleanup-transcribed.sh
 #
-# Periodic cleanup invoked by a LaunchAgent every 5 minutes. For each audio
-# file MacWhisper has auto-exported into voice-memos/transcripts-pending/
-# (which only happens after a successful transcription), remove the matching
-# source from voice-memos/untranscribed/. The auto-exported copy in
-# transcripts-pending/ already preserves the audio, so by default we delete
-# from untranscribed/; set VOICE_PIPELINE_ACTION=move to keep an explicit
-# transcribed/ archive instead.
+# Runs periodically via LaunchAgent. The "transcription complete" signal is
+# the appearance of a Segments-format .md file in the watch folder
+# (untranscribed/), written there by MacWhisper's Watched Folders export.
+# For each such transcript, this script:
 #
-# The watch folder thereby acts as a durable queue: anything in
-# untranscribed/ is pending; anything that's been processed is gone.
+#   1. Moves the .md into the Obsidian vault Inbox so the correctly-formatted
+#      transcript appears in Obsidian. Obsidian watches its vault directory
+#      on disk, so we bypass MacWhisper's REST integration entirely — that
+#      integration sends a different (worse) format anyway.
+#   2. Removes (or archives) the matching source audio — transcription
+#      succeeded, the source has done its job.
+#   3. Cleans up "(N).md" duplicate transcripts that result from re-runs.
+#
+# Set VOICE_PIPELINE_ACTION=move to archive sources to transcribed/ instead
+# of deleting (default: delete). The AI summary in transcripts-pending/ and
+# the original audio on the IC Recorder serve as backup either way.
+#
+# Override OBSIDIAN_INBOX=... if your vault path differs.
 
 set -euo pipefail
 
@@ -28,41 +36,97 @@ else
   exit 1
 fi
 
+OBSIDIAN_INBOX="${OBSIDIAN_INBOX:-$HOME/Documents/first-obsidian/Transcripts/Inbox}"
 UNTRANSCRIBED="$DROPBOX_BASE/voice-memos/untranscribed"
-PENDING="$DROPBOX_BASE/voice-memos/transcripts-pending"
 ARCHIVE="$DROPBOX_BASE/voice-memos/transcribed"
 LOG="$HOME/Library/Logs/voice-pipeline.log"
 
 mkdir -p "$(dirname "$LOG")"
+mkdir -p "$OBSIDIAN_INBOX"
 [[ "$ACTION" == "move" ]] && mkdir -p "$ARCHIVE"
 
 ts() { date "+%Y-%m-%d %H:%M:%S"; }
 
-[[ -d "$PENDING" ]]       || { echo "[$(ts)] cleanup: $PENDING missing" >> "$LOG"; exit 0; }
-[[ -d "$UNTRANSCRIBED" ]] || exit 0
+[[ -d "$UNTRANSCRIBED" ]] || { echo "[$(ts)] cleanup: $UNTRANSCRIBED missing" >> "$LOG"; exit 0; }
 
 shopt -s nullglob nocaseglob
-removed=0
-for completed in "$PENDING"/*.mp3 "$PENDING"/*.wav "$PENDING"/*.m4a; do
-  base=$(basename "$completed")
-  src="$UNTRANSCRIBED/$base"
-  [[ -f "$src" ]] || continue
+moved_md=0
+removed_audio=0
+removed_dupes=0
+
+for md in "$UNTRANSCRIBED"/*.md; do
+  base=$(basename "$md" .md)
+
+  # Skip duplicate-named files like "name (1).md"; canonical pass sweeps them.
+  if [[ "$base" =~ \ \([0-9]+\)$ ]]; then
+    continue
+  fi
+
+  # Find a matching audio source (case-tolerant for case-sensitive volumes)
+  audio=""
+  for ext in mp3 wav m4a MP3 WAV M4A; do
+    if [[ -f "$UNTRANSCRIBED/$base.$ext" ]]; then
+      audio="$UNTRANSCRIBED/$base.$ext"
+      break
+    fi
+  done
+
+  if [[ -z "$audio" ]]; then
+    # Transcript without source — orphaned (audio cleaned in earlier pass).
+    # Still relocate it so transcripts don't pile up here.
+    dest_md="$OBSIDIAN_INBOX/$(basename "$md")"
+    if [[ -f "$dest_md" ]]; then
+      rm "$md"
+      echo "[$(ts)] cleanup: orphan $base.md already in Obsidian; removed local copy" >> "$LOG"
+    else
+      mv "$md" "$dest_md"
+      moved_md=$((moved_md + 1))
+      echo "[$(ts)] cleanup: moved orphan $base.md → $OBSIDIAN_INBOX/" >> "$LOG"
+    fi
+    continue
+  fi
+
+  # Move .md → Obsidian Inbox (don't overwrite an existing one)
+  dest_md="$OBSIDIAN_INBOX/$(basename "$md")"
+  if [[ -f "$dest_md" ]]; then
+    rm "$md"
+    echo "[$(ts)] cleanup: $base.md already in Obsidian inbox; removed local copy" >> "$LOG"
+  else
+    mv "$md" "$dest_md"
+    moved_md=$((moved_md + 1))
+    echo "[$(ts)] cleanup: moved $base.md → $OBSIDIAN_INBOX/" >> "$LOG"
+  fi
+
+  # Handle the source audio
   case "$ACTION" in
     delete)
-      rm "$src"
-      echo "[$(ts)] cleanup: deleted $src" >> "$LOG"
+      rm "$audio"
+      removed_audio=$((removed_audio + 1))
+      echo "[$(ts)] cleanup: deleted $audio" >> "$LOG"
       ;;
     move)
-      mv "$src" "$ARCHIVE/$base"
-      echo "[$(ts)] cleanup: moved $src → $ARCHIVE/$base" >> "$LOG"
+      mv "$audio" "$ARCHIVE/"
+      removed_audio=$((removed_audio + 1))
+      echo "[$(ts)] cleanup: moved $audio → $ARCHIVE/" >> "$LOG"
       ;;
     *)
       echo "[$(ts)] cleanup: unknown ACTION=$ACTION" >> "$LOG"
       exit 1
       ;;
   esac
-  removed=$((removed + 1))
+
+  # Delete duplicate transcripts: "base (N).md", "base (NN).md", etc.
+  for dupe in "$UNTRANSCRIBED/$base"' ('*')'.md; do
+    [[ -f "$dupe" ]] || continue
+    rm "$dupe"
+    removed_dupes=$((removed_dupes + 1))
+    echo "[$(ts)] cleanup: removed duplicate $dupe" >> "$LOG"
+  done
 done
 
-[[ "$removed" -gt 0 ]] && echo "[$(ts)] cleanup: removed $removed source(s) (action=$ACTION)" >> "$LOG"
+total=$((moved_md + removed_audio + removed_dupes))
+if [[ "$total" -gt 0 ]]; then
+  echo "[$(ts)] cleanup: moved=$moved_md md, ${ACTION}d=$removed_audio audio, dupes_removed=$removed_dupes" >> "$LOG"
+fi
+
 exit 0
