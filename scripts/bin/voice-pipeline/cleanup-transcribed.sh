@@ -133,6 +133,34 @@ for md in "$UNTRANSCRIBED"/*.md; do
   done
 done
 
+# Second pass: sweep audio orphans whose transcript already lives in Obsidian
+# Inbox. This handles the common case of leaving recordings on the IC Recorder
+# after transcription — next sync re-copies the audio, but MacWhisper's
+# "Save to History" correctly skips re-transcription, leaving an audio file
+# with no local .md that the main loop above can't match.
+for audio in "$UNTRANSCRIBED"/*.mp3 "$UNTRANSCRIBED"/*.wav "$UNTRANSCRIBED"/*.m4a; do
+  [[ -f "$audio" ]] || continue
+  fname=$(basename "$audio")
+  [[ "$fname" == ._* ]] && continue   # skip AppleDouble metadata
+  base="${fname%.*}"
+
+  # Only act if the corresponding transcript is in Obsidian Inbox
+  [[ -f "$OBSIDIAN_INBOX/$base.md" ]] || continue
+
+  case "$ACTION" in
+    delete)
+      rm "$audio"
+      echo "[$(ts)] cleanup: deleted already-transcribed $fname (md in Obsidian)" >> "$LOG"
+      removed_audio=$((removed_audio + 1))
+      ;;
+    move)
+      mv "$audio" "$ARCHIVE/"
+      echo "[$(ts)] cleanup: moved already-transcribed $fname → $ARCHIVE/" >> "$LOG"
+      removed_audio=$((removed_audio + 1))
+      ;;
+  esac
+done
+
 total=$((moved_md + removed_audio + removed_dupes))
 if [[ "$total" -gt 0 ]]; then
   echo "[$(ts)] cleanup: moved=$moved_md md, ${ACTION}d=$removed_audio audio, dupes_removed=$removed_dupes" >> "$LOG"
