@@ -27,20 +27,30 @@
 
 set -euo pipefail
 
+# Ensure Homebrew bins (ffmpeg, etc.) are on PATH. Hammerspoon and launchd
+# spawn processes with a minimal /usr/bin:/bin PATH that doesn't include
+# /opt/homebrew/bin or /usr/local/bin where Homebrew installs binaries.
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 SRC="${1:?usage: $0 <volume-mount-path>}"
 
-# Dropbox base — auto-detect. macOS moved Dropbox to ~/Library/CloudStorage/Dropbox
-# a few years back, but plenty of installs still have ~/Dropbox (real path or
-# a backwards-compat symlink). Override with DROPBOX_BASE=... if neither default
-# fits your install.
+# Dropbox base — pick the directory that ACTUALLY contains voice-memos/, since
+# many systems have both ~/Dropbox (legacy, often empty or stub) and the
+# current ~/Library/CloudStorage/Dropbox. Falls back to whichever Dropbox
+# directory exists at all if voice-memos isn't there yet. Override with
+# DROPBOX_BASE=... if neither default fits your install.
 if [[ -n "${DROPBOX_BASE:-}" ]]; then
   : # honor explicit override
-elif [[ -d "$HOME/Dropbox" ]]; then
+elif [[ -d "$HOME/Library/CloudStorage/Dropbox/voice-memos" ]]; then
+  DROPBOX_BASE="$HOME/Library/CloudStorage/Dropbox"
+elif [[ -d "$HOME/Dropbox/voice-memos" ]]; then
   DROPBOX_BASE="$HOME/Dropbox"
 elif [[ -d "$HOME/Library/CloudStorage/Dropbox" ]]; then
   DROPBOX_BASE="$HOME/Library/CloudStorage/Dropbox"
+elif [[ -d "$HOME/Dropbox" ]]; then
+  DROPBOX_BASE="$HOME/Dropbox"
 else
-  echo "ERROR: no Dropbox base found (tried ~/Dropbox and ~/Library/CloudStorage/Dropbox)" >&2
+  echo "ERROR: no Dropbox base found" >&2
   exit 3
 fi
 
@@ -107,10 +117,11 @@ FILTER+=",aformat=dblp,areverse"
   done < <(
     find "$SRC" -type f \( \
           -iname "*.mp3" -o -iname "*.wav" -o -iname "*.m4a" \
-        \) -not -path "*/.Trashes/*" \
+        \) -not -name "._*" \
+           -not -path "*/.Trashes/*" \
            -not -path "*/.Spotlight-V100/*" \
            -not -path "*/.fseventsd/*" \
-           -print0
+           -print0 2>/dev/null
   )
 
   echo "[$(ts)] processed=$processed new=$copied trimmed=$trimmed fallback=$fallback"
