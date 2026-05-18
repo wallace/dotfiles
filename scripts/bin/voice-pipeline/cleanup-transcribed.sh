@@ -23,14 +23,23 @@
 
 set -euo pipefail
 
+# Ensure Homebrew bins are on PATH for the same reason as sync-ic-recorder.sh.
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 ACTION="${VOICE_PIPELINE_ACTION:-delete}"   # "delete" | "move"
 
+# Dropbox base — pick the directory that ACTUALLY contains voice-memos/, since
+# many systems have both ~/Dropbox (legacy stub) and ~/Library/CloudStorage/Dropbox.
 if [[ -n "${DROPBOX_BASE:-}" ]]; then
   : # honor explicit override
-elif [[ -d "$HOME/Dropbox" ]]; then
+elif [[ -d "$HOME/Library/CloudStorage/Dropbox/voice-memos" ]]; then
+  DROPBOX_BASE="$HOME/Library/CloudStorage/Dropbox"
+elif [[ -d "$HOME/Dropbox/voice-memos" ]]; then
   DROPBOX_BASE="$HOME/Dropbox"
 elif [[ -d "$HOME/Library/CloudStorage/Dropbox" ]]; then
   DROPBOX_BASE="$HOME/Library/CloudStorage/Dropbox"
+elif [[ -d "$HOME/Dropbox" ]]; then
+  DROPBOX_BASE="$HOME/Dropbox"
 else
   echo "ERROR: no Dropbox base found" >&2
   exit 1
