@@ -80,6 +80,7 @@ export EDITOR=`which nvim`
 
 # Aliases
 alias gpfl="ggfl"
+alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
 
 # Run rubocop over files that differ from the master branch
 alias mastrbc="git diff-tree -r --no-commit-id --name-only master@\{u\} head | xargs ls -1 2>/dev/null | xargs rubocop --force-exclusion"
