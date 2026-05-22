@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+# copilot-sticky-gist: maintain a single updateable gist per label.
+#
+# Typical Copilot CLI flow:
+#   /share md /tmp/sess.md
+#   !copilot-sticky-gist push session my-label /tmp/sess.md
+#
+# Or via stdin:
+#   /share md /tmp/sess.md
+#   !cat /tmp/sess.md | copilot-sticky-gist push session my-label
+
+set -euo pipefail
+
+STATE_DIR="${COPILOT_HOME:-$HOME/.copilot}"
+STATE_FILE="$STATE_DIR/running-gists.json"
+
+usage() {
+    cat >&2 <<EOF
+Usage:
+  copilot-sticky-gist push session  <label> [file|-]   Update labeled gist with session markdown
+  copilot-sticky-gist push research <label> [file|-]   Update labeled gist with research markdown
+  copilot-sticky-gist list                              List labels and gist URLs
+  copilot-sticky-gist url <label>                       Print URL for label
+  copilot-sticky-gist forget <label>                    Remove label mapping (does not delete gist)
+  copilot-sticky-gist open <label>                      Open gist in browser
+
+If [file] is omitted or "-", reads markdown from stdin.
+
+State: $STATE_FILE
+EOF
+}
+
+ensure_state() {
+    mkdir -p "$STATE_DIR"
+    [ -f "$STATE_FILE" ] || echo '{}' > "$STATE_FILE"
+}
+
+py_state() {
+    STATE_FILE="$STATE_FILE" python3 - "$@"
+}
+
+state_get() {
+    py_state "$1" <<'PY'
+import json, os, sys
+with open(os.environ["STATE_FILE"]) as f:
+    d = json.load(f)
+v = d.get(sys.argv[1])
+if isinstance(v, dict):
+    print(v.get("id", ""))
+    print(v.get("filename", ""))
+elif isinstance(v, str):
+    # legacy: bare gist id
+    print(v)
+    print("")
+else:
+    print("")
+    print("")
+PY
+}
+
+state_set() {
+    py_state "$1" "$2" "$3" <<'PY'
+import json, os, sys
+p = os.environ["STATE_FILE"]
+with open(p) as f:
+    d = json.load(f)
+d[sys.argv[1]] = {"id": sys.argv[2], "filename": sys.argv[3]}
+with open(p, "w") as f:
+    json.dump(d, f, indent=2)
+    f.write("\n")
+PY
+}
+
+state_del() {
+    py_state "$1" <<'PY'
+import json, os, sys
+p = os.environ["STATE_FILE"]
+with open(p) as f:
+    d = json.load(f)
+d.pop(sys.argv[1], None)
+with open(p, "w") as f:
+    json.dump(d, f, indent=2)
+    f.write("\n")
+PY
+}
+
+state_list() {
+    py_state <<'PY'
+import json, os
+with open(os.environ["STATE_FILE"]) as f:
+    d = json.load(f)
+if not d:
+    print("(no labels)")
+for k, v in d.items():
+    gid = v.get("id") if isinstance(v, dict) else v
+    print(f"{k}\thttps://gist.github.com/{gid}")
+PY
+}
+
+slug() {
+    echo "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g'
+}
+
+resolve_input() {
+    local src="${1:-}"
+    if [ -z "$src" ] || [ "$src" = "-" ]; then
+        local tmp
+        tmp=$(mktemp -t sticky-gist.XXXXXX)
+        cat > "$tmp"
+        echo "$tmp"
+    else
+        [ -r "$src" ] || { echo "Cannot read file: $src" >&2; exit 1; }
+        echo "$src"
+    fi
+}
+
+require_gh() {
+    command -v gh >/dev/null || { echo "gh CLI not installed" >&2; exit 1; }
+    gh auth status >/dev/null 2>&1 || { echo "gh not authenticated. Run: gh auth login" >&2; exit 1; }
+}
+
+cmd_push() {
+    local kind="${1:-}" label="${2:-}" file="${3:-}"
+    [ -n "$kind" ] && [ -n "$label" ] || { usage; exit 2; }
+    ensure_state
+    require_gh
+
+    local desc filename sluglbl
+    sluglbl=$(slug "$label")
+    case "$kind" in
+        session)
+            desc="Copilot CLI session — $label"
+            filename="session-${sluglbl}.md"
+            ;;
+        research)
+            desc="Copilot CLI research — $label"
+            filename="research-${sluglbl}.md"
+            ;;
+        *)
+            echo "Unknown push kind: $kind (expected: session, research)" >&2
+            exit 2
+            ;;
+    esac
+
+    local input
+    input=$(resolve_input "$file")
+
+    local gist_id stored_filename
+    # state_get prints two lines: id, filename
+    { IFS= read -r gist_id; IFS= read -r stored_filename; } < <(state_get "$label")
+
+    if [ -n "$gist_id" ]; then
+        # Update: overwrite the stored filename in the gist.
+        local target="${stored_filename:-$filename}"
+        gh gist edit "$gist_id" --filename "$target" "$input" >/dev/null
+        echo "Updated: https://gist.github.com/$gist_id"
+    else
+        # Create new secret gist via stdin so we control the filename.
+        local url
+        url=$(gh gist create -f "$filename" -d "$desc" - < "$input" | tail -n1)
+        if [[ "$url" != https://gist.github.com/* ]]; then
+            echo "Unexpected gh output: $url" >&2
+            exit 1
+        fi
+        gist_id="${url##*/}"
+        state_set "$label" "$gist_id" "$filename"
+        echo "Created: $url"
+    fi
+}
+
+cmd_url() {
+    local label="${1:?missing label}"
+    ensure_state
+    local id _fname
+    { IFS= read -r id; IFS= read -r _fname; } < <(state_get "$label")
+    [ -n "$id" ] || { echo "No gist mapped to label: $label" >&2; exit 1; }
+    echo "https://gist.github.com/$id"
+}
+
+cmd_open() {
+    local label="${1:?missing label}"
+    ensure_state
+    local id _fname
+    { IFS= read -r id; IFS= read -r _fname; } < <(state_get "$label")
+    [ -n "$id" ] || { echo "No gist mapped to label: $label" >&2; exit 1; }
+    open "https://gist.github.com/$id"
+}
+
+cmd_list() {
+    ensure_state
+    state_list
+}
+
+cmd_forget() {
+    local label="${1:?missing label}"
+    ensure_state
+    state_del "$label"
+    echo "Forgot label: $label (gist not deleted)"
+}
+
+main() {
+    [ $# -ge 1 ] || { usage; exit 1; }
+    local cmd="$1"; shift
+    case "$cmd" in
+        push)           cmd_push "$@" ;;
+        url)            cmd_url "$@" ;;
+        open)           cmd_open "$@" ;;
+        list)           cmd_list ;;
+        forget)         cmd_forget "$@" ;;
+        -h|--help|help) usage ;;
+        *) echo "Unknown command: $cmd" >&2; usage; exit 1 ;;
+    esac
+}
+
+main "$@"
