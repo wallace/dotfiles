@@ -94,6 +94,7 @@ PowerShell setup (zsh-like experience):
     $ stow ruby_debugger
     $ stow rubygems
     $ stow scripts
+    $ stow copilot-cli
     $ stow tmux
     $ stow vim
     $ stow irb
