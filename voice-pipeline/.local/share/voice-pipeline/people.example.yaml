@@ -1,0 +1,6 @@
+# TEMPLATE — safe to commit. Copy to your vault as people.yaml and fill in real
+# values THERE. The real file is git-ignored and must never reach a public repo.
+people:
+  Alice:   {github: alice-example, tag: alice-example}
+  Bob:     {github: bob-example,   tag: bob-example}
+  # Keep github and tag equal unless they intentionally differ.

@@ -1,0 +1,8 @@
+# TEMPLATE — safe to commit. Copy to your vault as speakers.yaml. Real file is
+# git-ignored. Maps MacWhisper "Speaker N" tags -> display names (see people.yaml).
+meetings:
+  - match: ".*"          # fallback: assume nothing
+    speakers: {}
+files:
+  "YYMMDD_HHMM":         # one exact filename stem
+    Speaker 2: Alice

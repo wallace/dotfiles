@@ -1,0 +1,17 @@
+# ── Sensitive: never commit to the public dotfiles repo ──────────────────────
+# Real rosters map colleagues' names -> GitHub handles -> team structure.
+# They live in the Obsidian vault, not here. These names catch them if one ever
+# gets copied into the code dir by mistake.
+people.yaml
+speakers.yaml
+*.local.yaml
+*.local.sh
+
+# Generated notes / transcripts must never be committed (may contain private content)
+*- Summary.md
+*- Clean.md
+
+# Python cruft / scratch
+__pycache__/
+*.pyc
+test/

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Installed via GNU stow: this launcher lands at ~/bin/voice-transcript (symlink),
+# and the pipeline code at ~/.local/share/voice-pipeline/ (also stowed). Because it
+# resolves code by canonical path, symlink self-location is not needed.
+#
+# Two env vars keep the public repo free of any home/vault path. Set in ~/.zshrc
+# (not committed):
+#   export TRANSCRIPT_ROSTER_DIR="$HOME/Documents/first-obsidian/03-Projects/transcript-pipeline"
+#   # optional, only if you stow the code somewhere non-default:
+#   export VOICE_PIPELINE_DIR="$HOME/.local/share/voice-pipeline"
+set -euo pipefail
+CODE_DIR="${VOICE_PIPELINE_DIR:-$HOME/.local/share/voice-pipeline}"
+ROSTER_DIR="${TRANSCRIPT_ROSTER_DIR:?Set TRANSCRIPT_ROSTER_DIR to your vault's transcript-pipeline folder}"
+exec python3 "$CODE_DIR/transcript_pipeline.py" \
+  --speakers "$ROSTER_DIR/speakers.yaml" \
+  --people   "$ROSTER_DIR/people.yaml" \
+  "$@"
