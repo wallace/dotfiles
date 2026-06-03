@@ -1,19 +1,23 @@
 #!/bin/sh
+# Split a file into N-line chunks, preserving the header row on each.
+# Note: uses `sed -i ''` (BSD/macOS syntax). On GNU sed (Linux) drop the ''.
 
-big_file=$1
-maximum_line_count=$2
+set -u
 
-header=`head -n 1 $big_file`
+big_file="$1"
+maximum_line_count="$2"
+
+header=$(head -n 1 "$big_file")
 echo "the header line is: "
 echo "$header"
 
-line_count=`echo $maximum_line_count + 1 | bc`
+line_count=$((maximum_line_count + 1))
 echo "splitting the file where each file will have $line_count lines"
-split -l $maximum_line_count $big_file
+split -l "$maximum_line_count" "$big_file"
 
 echo "inserting the header"
-find . -name "xa*" -exec sed -i '' -e "1i \\
-  $header
+find . -name "xa*" -exec sed -i '' -e "1i\\
+$header
 " {} \;
 
 echo "removing the duplicate header from the first file in split"

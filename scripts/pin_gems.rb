@@ -7,7 +7,10 @@ new_gemfile = File.readlines("Gemfile").map do |line|
     gem_name = $1
     spec = specs.find { |s| s.name == gem_name }
     if spec
-      line.sub(/gem\s+["'](.*?)["'](,\s*(.*))?/, "gem \"\\1\", \"#{spec.version}\"\\2")
+      line.sub(/gem\s+["'](.*?)["'](,\s*(.*))?/) do
+        rest = Regexp.last_match(2) || ""
+        %(gem "#{Regexp.last_match(1)}", "#{spec.version}"#{rest})
+      end
     else
       line
     end

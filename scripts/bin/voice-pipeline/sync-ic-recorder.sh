@@ -39,25 +39,9 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 SRC="${1:?usage: $0 <volume-mount-path>}"
 
-# Dropbox base — pick the directory that ACTUALLY contains voice-memos/, since
-# many systems have both ~/Dropbox (legacy, often empty or stub) and the
-# current ~/Library/CloudStorage/Dropbox. Falls back to whichever Dropbox
-# directory exists at all if voice-memos isn't there yet. Override with
-# DROPBOX_BASE=... if neither default fits your install.
-if [[ -n "${DROPBOX_BASE:-}" ]]; then
-  : # honor explicit override
-elif [[ -d "$HOME/Library/CloudStorage/Dropbox/voice-memos" ]]; then
-  DROPBOX_BASE="$HOME/Library/CloudStorage/Dropbox"
-elif [[ -d "$HOME/Dropbox/voice-memos" ]]; then
-  DROPBOX_BASE="$HOME/Dropbox"
-elif [[ -d "$HOME/Library/CloudStorage/Dropbox" ]]; then
-  DROPBOX_BASE="$HOME/Library/CloudStorage/Dropbox"
-elif [[ -d "$HOME/Dropbox" ]]; then
-  DROPBOX_BASE="$HOME/Dropbox"
-else
-  echo "ERROR: no Dropbox base found" >&2
-  exit 3
-fi
+# shellcheck source=./dropbox-base.sh
+source "$(dirname "$0")/dropbox-base.sh"
+resolve_dropbox_base || exit 3
 
 DEST="$DROPBOX_BASE/voice-memos/untranscribed"
 LOG="$HOME/Library/Logs/voice-pipeline.log"

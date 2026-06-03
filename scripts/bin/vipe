@@ -38,24 +38,20 @@ fi
 
 # temp file
 
-t=/tmp/vipe.$$.txt
-touch $t
+t=$(mktemp -t vipe.XXXXXX)
+trap 'rm -f "$t"' EXIT
 
 # read from stdin
 
 if [ ! -t 0 ]; then
-  cat > $t
+  cat > "$t"
 fi
 
 # spawn editor with stdio connected
 
-${EDITOR} $t < /dev/tty > /dev/tty || exit $?
+"${EDITOR}" "$t" < /dev/tty > /dev/tty || exit $?
 
 # write to stdout
 
-cat $t
-
-# cleanup
-
-rm $t
+cat "$t"
 

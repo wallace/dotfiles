@@ -39,9 +39,15 @@ if [ "$CODESPACES" == "true" ]; then
 
   if ! command -v delta &>/dev/null; then
     fancy_echo "Installing git-delta"
-    DELTA_DEB_URL=$(curl -fsSL "https://api.github.com/repos/dandavison/delta/releases/latest" \
-      | grep "browser_download_url.*amd64.deb" | cut -d '"' -f 4)
+    # Pin a known-good version rather than auto-resolving "latest" so a
+    # compromised or malformed release can't pull in an arbitrary .deb.
+    DELTA_VERSION="${DELTA_VERSION:-0.18.2}"
+    DELTA_SHA256="${DELTA_SHA256:-}"   # optional pin; set in CI/automation
+    DELTA_DEB_URL="https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}/git-delta_${DELTA_VERSION}_amd64.deb"
     curl -fsSL "$DELTA_DEB_URL" -o /tmp/git-delta.deb
+    if [ -n "$DELTA_SHA256" ]; then
+      echo "$DELTA_SHA256  /tmp/git-delta.deb" | sha256sum -c -
+    fi
     sudo dpkg -i /tmp/git-delta.deb && rm /tmp/git-delta.deb
   fi
 

@@ -120,11 +120,12 @@ export COMPOSE_PROFILES="tourneys,frontend"
 if [[ $(uname -r) == *"WSL2"* ]]; then
     export SSH_AUTH_SOCK="$HOME/.ssh/agent.sock"
     NPIPERELAY="/mnt/c/Users/jonat/go/bin/npiperelay.exe"
+    SSH_BRIDGE_LOG="$HOME/.ssh/agent.sock.log"
 
     if ! ss -a 2>/dev/null | grep -q "$SSH_AUTH_SOCK"; then
-        mkdir -p "$(dirname $SSH_AUTH_SOCK)"
+        mkdir -p "$(dirname "$SSH_AUTH_SOCK")"
         rm -f "$SSH_AUTH_SOCK"
-        (setsid socat UNIX-LISTEN:"$SSH_AUTH_SOCK",fork EXEC:"$NPIPERELAY -ei -s //./pipe/openssh-ssh-agent" &) >/dev/null 2>&1
+        (setsid socat UNIX-LISTEN:"$SSH_AUTH_SOCK",fork EXEC:"$NPIPERELAY -ei -s //./pipe/openssh-ssh-agent" &) >>"$SSH_BRIDGE_LOG" 2>&1
     fi
 fi
 
