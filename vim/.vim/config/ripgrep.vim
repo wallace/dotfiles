@@ -1,8 +1,8 @@
 """ Keybindings
 """""""""""""""
 
-" Use smart case with ripgrep
-let g:rg_command = 'rg --vimgrep -S'
+" :Rg is provided by fzf.vim. Its default command honors FZF_DEFAULT_COMMAND
+" plus the query you type, so no extra g:rg_command is needed.
 
 " Use <Leader>a to prompt you for an Ack! search
 map <Leader>a :Rg<SPACE>

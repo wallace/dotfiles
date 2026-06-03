@@ -1,7 +1,7 @@
 " Use <Leader><Leader> as a shortcut to enter commands (faster and less strain
 "  than hitting Shift-: in most cases).
 " nnoremap <Leader><Leader> :
-" conflicts with easymotion plugin
+" conflicts with vim-easymotion's <Leader><Leader> prefix
 
 """ Writing Buffers / Quitting
 """"""""""""""""""""""""""""""

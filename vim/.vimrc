@@ -15,7 +15,7 @@ Plug 'chriskempson/base16-vim'
 Plug 'tpope/vim-bundler', { 'for': 'ruby' } " path and tags includes gems from Bundle file
 Plug 'github/copilot.vim', { 'on': [] } " Lazy-loaded on InsertEnter
 Plug 'chrisbra/csv.vim'
-Plug 'Lokaltog/vim-easymotion'
+Plug 'easymotion/vim-easymotion'
 Plug 'tpope/vim-endwise'
 Plug 'tpope/vim-fugitive'
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
@@ -31,13 +31,11 @@ Plug 'scrooloose/nerdcommenter'
 Plug 'scrooloose/nerdtree', { 'on': ['NERDTree', 'NERDTreeToggle', 'NERDTreeFind'] }
 Plug 'tpope/vim-rake'
 Plug 'tpope/vim-rails'
-Plug 'thoughtbot/vim-rspec'
 Plug 'danro/rename.vim'
 Plug 'tpope/vim-repeat'
 Plug 'tpope/vim-rhubarb'
 Plug 'vim-ruby/vim-ruby', { 'for': 'ruby' }
 Plug 'ecomba/vim-ruby-refactoring', { 'for': 'ruby' }
-Plug 'jremmen/vim-ripgrep'
 Plug 'slim-template/vim-slim'
 Plug 'tpope/vim-surround'
 Plug 'godlygeek/tabular'
