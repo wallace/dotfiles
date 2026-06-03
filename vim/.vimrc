@@ -39,7 +39,6 @@ Plug 'vim-ruby/vim-ruby', { 'for': 'ruby' }
 Plug 'ecomba/vim-ruby-refactoring', { 'for': 'ruby' }
 Plug 'jremmen/vim-ripgrep'
 Plug 'slim-template/vim-slim'
-Plug 'ervandew/supertab'
 Plug 'tpope/vim-surround'
 Plug 'godlygeek/tabular'
 Plug 'janko-m/vim-test'
