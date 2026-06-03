@@ -315,7 +315,8 @@ def ollama_generate(cfg, prompt, max_tokens):
     )
     with urllib.request.urlopen(req, timeout=cfg.get("timeout", 900)) as r:
         resp = json.loads(r.read())
-    return resp["response"]
+    # done_reason == "length" means generation was cut off by num_predict
+    return resp["response"], resp.get("done_reason", "")
 
 
 def build_roster_block(people, mapping, recorder):
@@ -388,7 +389,8 @@ def identify_speakers(cfg, turns, people, roster_block):
                   .replace('{next_text}', trunc(next_t['text'], 300) if next_t else '(end of recording)'))
         name, conf = '?', '?'
         try:
-            ans = json.loads(ollama_generate(cfg, prompt, cfg.get("id_max_tokens", 120)))
+            raw, _ = ollama_generate(cfg, prompt, cfg.get("id_max_tokens", 120))
+            ans = json.loads(raw)
             name = (ans.get('speaker') or '').strip()
             conf = (ans.get('confidence') or '').lower()
         except Exception as e:                          # keep going; chunk stays Unlabeled
@@ -438,8 +440,8 @@ Rules:
   explicitly delegates the task to someone else by name. Do not reassign work to
   whoever the topic "sounds like". Use "Unknown" only for unlabelled turns with
   no identifiable speaker.
-- identity_guesses: ONLY for turns still labelled "Unlabeled". Infer from address,
-  hand-offs, or topic ownership.
+- identity_guesses: ONLY for turns still labelled "Unlabeled". At most 10 entries;
+  keep each clue under 12 words. Infer from address, hand-offs, or topic ownership.
   CRITICAL: a speaker cannot be someone they address or hand off to ("Robbie, your
   face says..." cannot be Robbie). Different unlabelled turns are often DIFFERENT
   people - do not assign one name to everything. Distribute across the known people.
@@ -450,10 +452,20 @@ TRANSCRIPT:
 
 
 def summarize(cfg, transcript_text, roster_block):
-    raw = ollama_generate(cfg,
-                          PROMPT.replace("{roster}", roster_block) + transcript_text,
-                          cfg.get("max_tokens", 4096))
-    return json.loads(raw)
+    """One retry with a doubled token budget if generation was cut off mid-JSON."""
+    prompt = PROMPT.replace("{roster}", roster_block) + transcript_text
+    budget = cfg.get("max_tokens", 4096)
+    for attempt in (1, 2):
+        raw, done_reason = ollama_generate(cfg, prompt, budget)
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            if done_reason == "length" and attempt == 1:
+                print(f"[stage2] output truncated at {budget} tokens; "
+                      f"retrying with {budget * 2}")
+                budget *= 2
+                continue
+            raise
 
 
 def render_note(stem, frontmatter, data, recorded, people, transcript_text=None):

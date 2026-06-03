@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# voice-inbox - manually process every unprocessed transcript in the Inbox.
+#
+# Public-repo safe: the Inbox location comes from $VAULT_INBOX (or the private
+# config ~/.config/voice-pipeline/env), never from this file.
+#
+# Skips README, generated "- Summary"/"- Clean" files, and any transcript whose
+# "<stem> - Summary.md" already exists - so re-running is always safe.
+#
+# Usage:
+#   voice-inbox                  # process everything unprocessed (two-pass)
+#   voice-inbox --dry-run        # just list what would be processed
+#   voice-inbox --single-pass    # extra flags pass through to voice-transcript
+set -uo pipefail
+
+CONF="$HOME/.config/voice-pipeline/env"
+if [[ -z "${VAULT_INBOX:-}" && -f "$CONF" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$CONF"
+  set +a
+fi
+INBOX="${VAULT_INBOX:?Set VAULT_INBOX (zshrc export or ~/.config/voice-pipeline/env)}"
+
+DRY=0
+ARGS=(--clean-transcript)
+for a in "$@"; do
+  case "$a" in
+    --dry-run) DRY=1 ;;
+    *) ARGS+=("$a") ;;
+  esac
+done
+
+shopt -s nullglob
+candidates=()
+for f in "$INBOX"/*.md; do
+  base="$(basename "$f" .md)"
+  [[ "$base" == "README" ]] && continue
+  [[ "$base" == *" - Summary"* || "$base" == *" - Clean"* ]] && continue
+  [[ -e "$INBOX/$base - Summary.md" ]] && continue
+  candidates+=("$f")
+done
+
+if [[ ${#candidates[@]} -eq 0 ]]; then
+  echo "Inbox clean: nothing to process."
+  exit 0
+fi
+
+echo "Unprocessed (${#candidates[@]}):"
+for f in "${candidates[@]}"; do echo "  $(basename "$f")"; done
+if [[ $DRY -eq 1 ]]; then
+  exit 0
+fi
+
+ok=0
+fail=0
+for f in "${candidates[@]}"; do
+  echo
+  echo "=== $(basename "$f") ==="
+  if voice-transcript "$f" "${ARGS[@]}"; then
+    ok=$((ok + 1))
+  else
+    fail=$((fail + 1))
+    echo "FAILED: $(basename "$f")"
+  fi
+done
+
+echo
+echo "Done: $ok succeeded, $fail failed."
+[[ $fail -eq 0 ]]
