@@ -1,12 +1,14 @@
-zmodload zsh/zprof
 export ZSH="$HOME/.oh-my-zsh"
 
 # Consolidate all PATH exports at the beginning
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$HOME/bin:$PATH"
+export PATH="$BUN_INSTALL/bin:$PATH"
+export PATH="/opt/homebrew/opt/postgresql@18/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$HOME/.rbenv/shims:$PATH"
 export PATH="$HOME/.nodenv/shims:$PATH"
 export PATH="/opt/homebrew/opt/mysql@5.7/bin:$PATH"
-export PATH="/opt/homebrew/opt/postgresql@15/bin:$PATH"
 export GOPATH="$HOME/go"
 export PATH="$PATH:${GOPATH}/bin"
 export PYENV_ROOT="$HOME/.pyenv"
@@ -49,19 +51,22 @@ nvm() {
     nvm "$@"
 }
 
-eval "$(nodenv init -)"
-## Lazy load nodenv
-#nodenv() {
-#    unset -f nodenv
-#    eval "$(nodenv init -)"
-#    nodenv "$@"
-#}
+# Lazy load nodenv
+nodenv() {
+    unset -f nodenv
+    eval "$(nodenv init -)"
+    nodenv "$@"
+}
 
-# Use rvm in Codespaces, rbenv everywhere else
+# Use rvm in Codespaces, rbenv (lazy) everywhere else
 if [ -n "$CODESPACES" ]; then
     [[ -s "$HOME/.rvm/scripts/rvm" ]] && source "$HOME/.rvm/scripts/rvm"
 else
-    eval "$(rbenv init -)"
+    rbenv() {
+        unset -f rbenv
+        eval "$(rbenv init -)"
+        rbenv "$@"
+    }
 fi
 
 # Lazy load pyenv
@@ -76,23 +81,12 @@ if command -v direnv &> /dev/null; then
     eval "$(direnv hook zsh)"
 fi
 
-export EDITOR=`which nvim`
+export EDITOR=nvim
 
 # Aliases
-alias gpfl="ggfl"
-alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
-
-# Run rubocop over files that differ from the master branch
-alias mastrbc="git diff-tree -r --no-commit-id --name-only master@\{u\} head | xargs ls -1 2>/dev/null | xargs rubocop --force-exclusion"
-
-# Run rubocop over files that differ from the main branch
-alias mainrbc="git diff-tree -r --no-commit-id --name-only main@\{u\} head | xargs ls -1 2>/dev/null | xargs rubocop --force-exclusion"
-
-# Run rubocop over files that differ from the current branch
-alias currrbc="git diff-tree -r --no-commit-id --name-only @\{u\} head | xargs rubocop --force-exclusion"
-
-# Run rubocop over uncommitted files
-alias nottrbc="git ls-files -m | xargs ls -1 2>/dev/null | grep '\.rb$' | xargs rubocop --force-exclusion"
+if [[ $(uname) == "Darwin" ]]; then
+    alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+fi
 
 # Base16 Shell with existence check
 BASE16_SHELL="$HOME/.config/base16-shell/"
@@ -149,11 +143,7 @@ fi
 [ -s "/Users/jonathanwallace/.bun/_bun" ] && source "/Users/jonathanwallace/.bun/_bun"
 
 # bun
-export BUN_INSTALL="$HOME/.bun"
-export PATH="$BUN_INSTALL/bin:$PATH"
 export DOTNET_ROOT="/opt/homebrew/opt/dotnet/libexec"
-zprof
-export PATH="/opt/homebrew/opt/postgresql@18/bin:$PATH"
 
 # Git rebase function - checkout main, pull, checkout branch, rebase main, and force push
 grebase() {
@@ -177,5 +167,4 @@ grebase() {
 }
 export TRANSCRIPT_ROSTER_DIR="$HOME/Documents/first-obsidian/03-Projects/transcript-pipeline"
 export VOICE_PIPELINE_PYTHON="$HOME/.venvs/voice-pipeline/bin/python"
-export PATH="$HOME/bin:$PATH"
 [ -f "$HOME/.config/voice-pipeline/env" ] && { set -a; source "$HOME/.config/voice-pipeline/env"; set +a; }
