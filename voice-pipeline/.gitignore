@@ -15,3 +15,6 @@ speakers.yaml
 __pycache__/
 *.pyc
 test/
+.venv/
+venv/
+.DS_Store

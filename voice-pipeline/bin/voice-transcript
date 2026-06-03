@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
 # Installed via GNU stow: this launcher lands at ~/bin/voice-transcript (symlink),
-# and the pipeline code at ~/.local/share/voice-pipeline/ (also stowed). Because it
-# resolves code by canonical path, symlink self-location is not needed.
+# and the pipeline code at ~/.local/share/voice-pipeline/ (also stowed).
 #
-# Two env vars keep the public repo free of any home/vault path. Set in ~/.zshrc
-# (not committed):
-#   export TRANSCRIPT_ROSTER_DIR="$HOME/Documents/first-obsidian/03-Projects/transcript-pipeline"
-#   # optional, only if you stow the code somewhere non-default:
-#   export VOICE_PIPELINE_DIR="$HOME/.local/share/voice-pipeline"
+# Env vars (set in ~/.zshrc or a launchd plist; none are committed):
+#   TRANSCRIPT_ROSTER_DIR   (required) vault folder with people.yaml + speakers.yaml
+#   VOICE_PIPELINE_PYTHON   (optional) absolute interpreter path, e.g. a dedicated
+#                           venv: $HOME/.venvs/voice-pipeline/bin/python. Defaults
+#                           to python3 (pyenv shim in interactive shells). Automation
+#                           (cron/launchd/Hammerspoon) should ALWAYS set this — those
+#                           contexts don't load shell init, so shims aren't on PATH.
+#   VOICE_PIPELINE_DIR      (optional) code location if stowed somewhere non-default.
 set -euo pipefail
+PYTHON="${VOICE_PIPELINE_PYTHON:-python3}"
 CODE_DIR="${VOICE_PIPELINE_DIR:-$HOME/.local/share/voice-pipeline}"
-ROSTER_DIR="${TRANSCRIPT_ROSTER_DIR:?Set TRANSCRIPT_ROSTER_DIR to your vault's transcript-pipeline folder}"
-exec python3 "$CODE_DIR/transcript_pipeline.py" \
+ROSTER_DIR="${TRANSCRIPT_ROSTER_DIR:?Set TRANSCRIPT_ROSTER_DIR to the vault transcript-pipeline folder}"
+exec "$PYTHON" "$CODE_DIR/transcript_pipeline.py" \
   --speakers "$ROSTER_DIR/speakers.yaml" \
   --people   "$ROSTER_DIR/people.yaml" \
   "$@"
