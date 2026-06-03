@@ -28,22 +28,9 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 ACTION="${VOICE_PIPELINE_ACTION:-delete}"   # "delete" | "move"
 
-# Dropbox base — pick the directory that ACTUALLY contains voice-memos/, since
-# many systems have both ~/Dropbox (legacy stub) and ~/Library/CloudStorage/Dropbox.
-if [[ -n "${DROPBOX_BASE:-}" ]]; then
-  : # honor explicit override
-elif [[ -d "$HOME/Library/CloudStorage/Dropbox/voice-memos" ]]; then
-  DROPBOX_BASE="$HOME/Library/CloudStorage/Dropbox"
-elif [[ -d "$HOME/Dropbox/voice-memos" ]]; then
-  DROPBOX_BASE="$HOME/Dropbox"
-elif [[ -d "$HOME/Library/CloudStorage/Dropbox" ]]; then
-  DROPBOX_BASE="$HOME/Library/CloudStorage/Dropbox"
-elif [[ -d "$HOME/Dropbox" ]]; then
-  DROPBOX_BASE="$HOME/Dropbox"
-else
-  echo "ERROR: no Dropbox base found" >&2
-  exit 1
-fi
+# shellcheck source=./dropbox-base.sh
+source "$(dirname "$0")/dropbox-base.sh"
+resolve_dropbox_base || exit 1
 
 OBSIDIAN_INBOX="${OBSIDIAN_INBOX:-$HOME/Documents/first-obsidian/Transcripts/Inbox}"
 UNTRANSCRIBED="$DROPBOX_BASE/voice-memos/untranscribed"

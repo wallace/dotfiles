@@ -1,16 +1,22 @@
 #!/usr/bin/python
-import re, subprocess
+import os
+import re
+import subprocess
+
+
 def get_keychain_pass(account=None, server=None):
-    params = {
-        'security': '/usr/bin/security',
-        'command': 'find-internet-password',
-        'account': account,
-        'server': server,
-        'keychain': '/Users/wallace/Library/Keychains/login.keychain',
-    }
-    command = "sudo -u wallace %(security)s -v %(command)s -g -a %(account)s -s %(server)s %(keychain)s" % params
-    output = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
+    keychain = os.path.expanduser("~/Library/Keychains/login.keychain")
+    cmd = [
+        "/usr/bin/security",
+        "-v",
+        "find-internet-password",
+        "-g",
+        "-a", account,
+        "-s", server,
+        keychain,
+    ]
+    output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
     outtext = [l for l in output.splitlines()
-               if l.startswith('password: ')][0]
+               if l.startswith(b"password: ")][0].decode()
 
     return re.match(r'password: "(.*)"', outtext).group(1)
