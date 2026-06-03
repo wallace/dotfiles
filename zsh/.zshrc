@@ -175,3 +175,6 @@ grebase() {
     echo "⬆️  Force pushing..." && \
     ggfl
 }
+export TRANSCRIPT_ROSTER_DIR="$HOME/Documents/first-obsidian/03-Projects/transcript-pipeline"
+export VOICE_PIPELINE_PYTHON="$HOME/.venvs/voice-pipeline/bin/python"
+export PATH="$HOME/bin:$PATH"
