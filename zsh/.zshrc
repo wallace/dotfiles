@@ -128,16 +128,9 @@ if [[ $(uname -r) == *"WSL2"* ]]; then
     fi
 fi
 
-# SSH Agent configuration (macOS/Linux)
-if [ -z "$SSH_AUTH_SOCK" ]; then
-   # Check for a currently running instance of the agent
-   RUNNING_AGENT="`ps -ax | grep 'ssh-agent -s' | grep -v grep | wc -l | tr -d '[:space:]'`"
-   if [ "$RUNNING_AGENT" = "0" ]; then
-        # Launch a new instance of the agent
-        ssh-agent -s &> $HOME/.ssh/ssh-agent
-   fi
-   eval `cat $HOME/.ssh/ssh-agent`
-fi
+# SSH Agent: macOS uses the launchd-managed agent (SSH_AUTH_SOCK is set
+# automatically). On Linux, rely on systemd --user or your DE's agent.
+# WSL2 handling above is the only case where we manage the socket ourselves.
 
 # bun completions
 [ -s "/Users/jonathanwallace/.bun/_bun" ] && source "/Users/jonathanwallace/.bun/_bun"
