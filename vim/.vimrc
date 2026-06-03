@@ -10,7 +10,7 @@ endif
 call plug#begin('~/.vim/plugged')
 
 Plug 'vim-scripts/AnsiEsc.vim'
-Plug 'Townk/vim-autoclose'
+Plug 'jiangmiao/auto-pairs'
 Plug 'chriskempson/base16-vim'
 Plug 'tpope/vim-bundler', { 'for': 'ruby' } " path and tags includes gems from Bundle file
 Plug 'github/copilot.vim', { 'on': [] } " Lazy-loaded on InsertEnter
@@ -71,7 +71,7 @@ let g:gitgutter_realtime = 0
 let g:gitgutter_eager = 0
 
 source ~/.vim/config/SudoW.vim
-source ~/.vim/config/autoclose.vim
+source ~/.vim/config/auto-pairs.vim
 source ~/.vim/config/clojure.vim
 source ~/.vim/config/colorscheme.vim
 source ~/.vim/config/completion.vim
