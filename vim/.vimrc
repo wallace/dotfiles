@@ -9,7 +9,6 @@ if empty(glob(data_dir . '/autoload/plug.vim'))
 endif
 call plug#begin('~/.vim/plugged')
 
-Plug 'vim-scripts/AnsiEsc.vim'
 Plug 'jiangmiao/auto-pairs'
 Plug 'chriskempson/base16-vim'
 Plug 'tpope/vim-bundler', { 'for': 'ruby' } " path and tags includes gems from Bundle file
@@ -24,14 +23,12 @@ Plug 'mattn/gist-vim'
 Plug 'airblade/vim-gitgutter'
 Plug 'tpope/vim-haml'
 Plug 'pangloss/vim-javascript'
-Plug 'othree/javascript-libraries-syntax.vim'
 Plug 'nathanaelkane/vim-indent-guides'
 Plug 'itchyny/lightline.vim'
 Plug 'scrooloose/nerdcommenter'
 Plug 'scrooloose/nerdtree', { 'on': ['NERDTree', 'NERDTreeToggle', 'NERDTreeFind'] }
 Plug 'tpope/vim-rake'
 Plug 'tpope/vim-rails'
-Plug 'danro/rename.vim'
 Plug 'tpope/vim-repeat'
 Plug 'tpope/vim-rhubarb'
 Plug 'vim-ruby/vim-ruby', { 'for': 'ruby' }
@@ -43,7 +40,6 @@ Plug 'janko-m/vim-test'
 Plug 'kana/vim-textobj-user', { 'for': 'ruby' }
 Plug 'nelstrom/vim-textobj-rubyblock', { 'for': 'ruby' }
 Plug 'christoomey/vim-tmux-navigator'
-Plug 'duwanis/tomdoc.vim'
 Plug 'tpope/vim-unimpaired'
 Plug 'benmills/vimux'
 Plug 'mattn/webapi-vim'
