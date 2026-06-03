@@ -27,7 +27,6 @@ Plug 'pangloss/vim-javascript'
 Plug 'othree/javascript-libraries-syntax.vim'
 Plug 'nathanaelkane/vim-indent-guides'
 Plug 'itchyny/lightline.vim'
-Plug 'wallace/vim-matchit'
 Plug 'scrooloose/nerdcommenter'
 Plug 'scrooloose/nerdtree', { 'on': ['NERDTree', 'NERDTreeToggle', 'NERDTreeFind'] }
 Plug 'tpope/vim-rake'
@@ -40,7 +39,6 @@ Plug 'vim-ruby/vim-ruby', { 'for': 'ruby' }
 Plug 'ecomba/vim-ruby-refactoring', { 'for': 'ruby' }
 Plug 'jremmen/vim-ripgrep'
 Plug 'slim-template/vim-slim'
-Plug 'wallace/snipmate.vim'
 Plug 'ervandew/supertab'
 Plug 'tpope/vim-surround'
 Plug 'godlygeek/tabular'
@@ -58,6 +56,9 @@ Plug 'Cian911/vim-cadence'
 Plug 'ojroques/vim-oscyank'
 
 call plug#end()
+
+" Use Vim's built-in matchit instead of a third-party fork.
+packadd! matchit
 
 " Lazy-load coc.nvim and copilot on first insert
 augroup lazy_load_plugins
