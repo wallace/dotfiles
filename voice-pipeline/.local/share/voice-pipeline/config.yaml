@@ -3,7 +3,7 @@
 # Ollama model tag. M4 Max / 64 GB runs either comfortably:
 #   qwen3:14b  -> fast (~35-50 tok/s), great for summary + todo extraction (default)
 #   qwen3:32b  -> higher quality, still well within 64 GB; swap in if you want it
-model: qwen3:14b
+model: qwen3:32b
 
 ollama_url: http://localhost:11434
 seed: 42          # fixed seed + temperature 0 => reproducible output on this host
