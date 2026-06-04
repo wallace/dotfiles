@@ -132,7 +132,16 @@ FILTER+=",aformat=dblp,areverse"
     # keeps growing it — surfacing as "Operation Stopped (mp3)" with sometimes
     # a duplicate entry for the same basename.
     tmp_path="$dest_path.partial"
-    if ffmpeg -nostdin -loglevel warning -i "$f" -af "$FILTER" -y "$tmp_path" 2>&1; then
+    # ffmpeg infers the output muxer from the extension; ".partial" defeats
+    # that, so pass the format explicitly based on the real destination
+    # extension. Unknown extensions omit -f and rely on the fallback below.
+    case "${dest_path##*.}" in
+      mp3) out_fmt="mp3" ;;
+      wav) out_fmt="wav" ;;
+      m4a) out_fmt="ipod" ;;
+      *)   out_fmt="" ;;
+    esac
+    if ffmpeg -nostdin -loglevel warning -i "$f" -af "$FILTER" ${out_fmt:+-f "$out_fmt"} -y "$tmp_path" 2>&1; then
       mv "$tmp_path" "$dest_path"
       trimmed=$((trimmed + 1))
       copied=$((copied + 1))
