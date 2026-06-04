@@ -255,13 +255,15 @@ def build_frontmatter(stem, recorded, participants, topic, people):
     return f"---\n{dumped}\n---\n"
 
 
-def merge_participants(roster_participants, data, people):
+def merge_participants(roster_participants, data, people, strict=True):
     """
     Frontmatter participants = roster-mapped speakers (ground truth, first) merged
     with the LLM's findings: its `participants` list plus the subjects of
-    high-confidence identity guesses. STRICT filter: LLM additions must be names
-    from people.yaml - this drops mentioned-but-not-speaking people and invented
-    names. Unknown real speakers remain visible as 'Unlabeled' in the transcript.
+    high-confidence identity guesses. With strict=True (profiles that define a
+    cast), LLM additions must be names from people.yaml - dropping mentioned-but-
+    not-speaking people and invented names. Permissive mode (cast-less profiles)
+    accepts transcript-grounded names but still filters junk labels; tags are
+    minted only for people.yaml names either way.
     """
     merged = list(roster_participants)
     extra = list(data.get("participants") or [])
@@ -269,7 +271,10 @@ def merge_participants(roster_participants, data, people):
               if (g.get("confidence", "") or "").lower() == "high"]
     for name in extra:
         name = (name or "").strip()
-        if not name or name in merged or name not in people:
+        if (not name or name in merged or name.startswith("Speaker ")
+                or name.lower() in ("unknown", "unlabeled", "unlabelled")):
+            continue
+        if strict and name not in people:
             continue
         merged.append(name)
     return merged
@@ -337,6 +342,55 @@ def build_roster_block(people, mapping, recorder):
                      "known people above unless the transcript clearly introduces "
                      "someone else.")
     return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------- #
+# Pass 0 - recording-profile selection (hybrid: flag > filename > classifier)
+# --------------------------------------------------------------------------- #
+CLASSIFY_PROMPT = """/no_think
+Classify this voice-memo transcript excerpt as one of these recording types:
+{options}
+
+Answer ONLY valid JSON, no prose:
+{"profile": "<one type name>", "confidence": "high|medium|low"}
+
+EXCERPT:
+"""
+
+
+def choose_profile(arg_profile, stem, roster_cfg, cfg, excerpt, allow_llm):
+    """
+    Returns (name, profile_dict, how). Profiles live in speakers.yaml; when none
+    are defined the pipeline keeps its original single-meeting behaviour.
+    """
+    profiles = roster_cfg.get("profiles") or {}
+    if not profiles:
+        if arg_profile:
+            sys.exit("--profile given but no profiles are defined in speakers.yaml")
+        return None, None, "none-defined"
+    if arg_profile:
+        if arg_profile not in profiles:
+            sys.exit(f"Unknown --profile {arg_profile!r}. Defined: {', '.join(profiles)}")
+        return arg_profile, profiles[arg_profile] or {}, "flag"
+    for name, p in profiles.items():
+        m = (p or {}).get("match")
+        if m and re.fullmatch(m, stem):
+            return name, p or {}, "filename"
+    if allow_llm:
+        options = "\n".join(f"- {n}: {(p or {}).get('description', n)}"
+                            for n, p in profiles.items())
+        prompt = CLASSIFY_PROMPT.replace("{options}", options) + excerpt
+        try:
+            raw, _ = ollama_generate(cfg, prompt, 80)
+            ans = json.loads(raw)
+            name = (ans.get("profile") or "").strip()
+            conf = (ans.get("confidence") or "").lower()
+            if name in profiles and conf in ("high", "medium"):
+                return name, profiles[name] or {}, f"classifier/{conf}"
+        except Exception as e:
+            print(f"[pass0] classification failed ({e}); using default")
+    default_name = roster_cfg.get("default_profile", "generic")
+    return default_name, profiles.get(default_name) or {}, "default"
 
 
 # --------------------------------------------------------------------------- #
@@ -551,6 +605,9 @@ def main():
     ap.add_argument("--speakers", type=Path, default=Path(__file__).with_name("speakers.yaml"))
     ap.add_argument("--people", type=Path, default=Path(__file__).with_name("people.yaml"))
     ap.add_argument("--no-llm", action="store_true", help="Stage 1 only; skip Ollama.")
+    ap.add_argument("--profile", default=None,
+                    help="Recording profile from speakers.yaml (overrides filename "
+                         "match and pass-0 classification).")
     ap.add_argument("--single-pass", action="store_true",
                     help="Skip pass-1 speaker identification (two-pass is the default).")
     ap.add_argument("--suffix", default="",
@@ -588,24 +645,50 @@ def main():
     print(f"[stage1] {len(segments)} segments -> {len(turns)} turns "
           f"({n_unlabelled} unlabelled), recorded={recorded}")
 
+    # ---- Pass 0: recording profile (flag > filename match > classifier > default)
+    excerpt = " ".join(t["text"] for t in turns)[:1500]
+    pname, prof, how = choose_profile(args.profile, stem, roster_cfg, cfg,
+                                      excerpt, allow_llm=not args.no_llm)
+    if prof is None:
+        # No profiles defined in speakers.yaml: original single-meeting behaviour.
+        prof = {"cast": list(people.keys()), "pass1": True, "tags": True}
+    else:
+        print(f"[profile] {pname} (via {how})")
+
+    cast = [c for c in (prof.get("cast") or []) if c in people]
+    cast_people = {k: people[k] for k in cast}
+    tag_people = people if prof.get("tags", True) else {}
+    strict = prof.get("strict_participants", bool(cast))
+
+    # Solo memos: deterministic attribution of all unlabelled turns to the recorder.
+    if prof.get("attribute_all_to") == "recorder" and recorder:
+        for t in turns:
+            if t["name"] == "Unlabeled":
+                t["name"] = recorder
+        turns = merge_adjacent(turns)
+        n_unlabelled = 0
+        print(f"[profile] all unlabelled turns -> {recorder}")
+
     clean_path = src.with_name(f"{stem} - Clean{args.suffix}.md")
 
     if args.no_llm:
         # No summary available without the LLM: frontmatter + transcript only.
         if args.clean_transcript:
             fm = build_frontmatter(stem, recorded,
-                                   participants_from_turns(turns), "", people)
+                                   participants_from_turns(turns), "", tag_people)
             clean_path.write_text(fm + "\n## Transcript\n\n"
-                                  + render_transcript(turns, people) + "\n")
+                                  + render_transcript(turns, tag_people) + "\n")
             print(f"[write] {clean_path}")
         return
 
-    roster_block = build_roster_block(people, mapping, recorder)
+    roster_block = build_roster_block(cast_people, mapping, recorder)
 
     # ---- Pass 1 (two-pass mode): forced-choice speaker identification ----
-    if two_pass and n_unlabelled:
+    # Needs a cast to choose from; cast-less profiles (generic/personal) skip it
+    # and rely on pass 2's text-grounded identity guesses instead.
+    if two_pass and prof.get("pass1", True) and cast_people and n_unlabelled:
         try:
-            turns = identify_speakers(cfg, turns, people, roster_block)
+            turns = identify_speakers(cfg, turns, cast_people, roster_block)
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as e:
             sys.exit(f"[pass1] Ollama call failed ({e}). Is the Ollama app running "
                      f"and `{cfg.get('model')}` pulled?")
@@ -618,7 +701,7 @@ def main():
         print(f"[pass1] {len(turns)} turns after merge; inferred: "
               f"{counts or 'none'}; still unlabelled: {still}")
 
-    transcript_text = render_transcript(turns, people)
+    transcript_text = render_transcript(turns, tag_people)
 
     # ---- Pass 2 / single pass: summary + todos ----
     try:
@@ -629,16 +712,18 @@ def main():
     except (KeyError, json.JSONDecodeError) as e:
         sys.exit(f"[stage2] Could not parse model output as JSON ({e}).")
 
-    participants = merge_participants(participants_from_turns(turns), data, people)
-    fm = build_frontmatter(stem, recorded, participants, data.get("topic", ""), people)
+    participants = merge_participants(participants_from_turns(turns), data,
+                                      people, strict=strict)
+    fm = build_frontmatter(stem, recorded, participants, data.get("topic", ""),
+                           tag_people)
 
-    note = render_note(stem, fm, data, recorded, people)
+    note = render_note(stem, fm, data, recorded, tag_people)
     out_path = src.with_name(f"{stem} - Summary{args.suffix}.md")
     out_path.write_text(note + "\n")
     print(f"[write] {out_path}")
 
     if args.clean_transcript:
-        clean_note = render_note(stem, fm, data, recorded, people,
+        clean_note = render_note(stem, fm, data, recorded, tag_people,
                                  transcript_text=transcript_text)
         clean_path.write_text(clean_note + "\n")
         print(f"[write] {clean_path}")
