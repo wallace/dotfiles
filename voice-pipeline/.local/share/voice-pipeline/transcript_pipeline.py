@@ -547,26 +547,27 @@ def salvage_json(raw, max_iters=80):
 
 def summarize(cfg, transcript_text, roster_block):
     """
-    One retry with a doubled token budget if generation was cut off mid-JSON;
-    if the retry truncates too (runaway/looping generation), salvage the intact
-    prefix rather than failing the file.
+    Single attempt; if generation hit the token cap (in practice: the model
+    looping, which no budget fixes - a doubled-budget retry on a 32B model
+    also blows the HTTP timeout), salvage the intact JSON prefix instead of
+    retrying or failing.
     """
     prompt = PROMPT.replace("{roster}", roster_block) + transcript_text
-    budget = cfg.get("max_tokens", 4096)
-    for attempt in (1, 2):
-        raw, done_reason = ollama_generate(cfg, prompt, budget)
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError:
-            if done_reason == "length" and attempt == 1:
-                print(f"[stage2] output truncated at {budget} tokens; "
-                      f"retrying with {budget * 2}")
-                budget *= 2
-                continue
-            data = salvage_json(raw)
-            print("[stage2] WARNING: output truncated again; salvaged the intact "
-                  "prefix - tail action items may be missing, review during triage")
-            return data
+    raw, done_reason = ollama_generate(cfg, prompt, cfg.get("max_tokens", 4096))
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        if done_reason == "length":
+            try:
+                data = salvage_json(raw)
+            except json.JSONDecodeError:
+                raise
+            if data.get("summary"):
+                print("[stage2] WARNING: output hit the token cap (model likely "
+                      "looping); salvaged the intact prefix - tail action items "
+                      "may be missing, review during triage")
+                return data
+        raise
 
 
 def render_note(stem, frontmatter, data, recorded, people, transcript_text=None):
