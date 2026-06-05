@@ -54,6 +54,28 @@ if [[ -n "${UNTRANSCRIBED_DIR:-}" && -d "$UNTRANSCRIBED_DIR" ]]; then
              -mmin +1 -print0 2>/dev/null)
   (( swept > 0 )) && echo "ingested $swept transcript(s) from untranscribed/" && echo
 
+  # Audio archival (TCC-safe complement to cleanup-transcribed.sh): once a
+  # transcript is in the Inbox, move its source audio into the vault audio
+  # folder so clickable timestamps resolve. Needs VOICE_PIPELINE_AUDIO_ARCHIVE.
+  if [[ -n "${VOICE_PIPELINE_AUDIO_ARCHIVE:-}" && $DRY -eq 0 ]]; then
+    mkdir -p "$VOICE_PIPELINE_AUDIO_ARCHIVE"
+    while IFS= read -r -d '' a; do
+      s="$(basename "$a")"
+      s="${s%.*}"
+      if [[ -e "$INBOX/$s.md" || -e "$INBOX/../$s.md" ]]; then
+        if [[ -e "$VOICE_PIPELINE_AUDIO_ARCHIVE/$(basename "$a")" ]]; then
+          rm "$a"
+          echo "audio: removed duplicate $(basename "$a") (already archived)"
+        else
+          mv "$a" "$VOICE_PIPELINE_AUDIO_ARCHIVE/"
+          echo "audio: archived $(basename "$a") -> vault"
+        fi
+      fi
+    done < <(find "$UNTRANSCRIBED_DIR" -maxdepth 1 -type f \
+               \( -iname "*.mp3" -o -iname "*.m4a" -o -iname "*.wav" \) \
+               -mmin +1 -print0 2>/dev/null)
+  fi
+
   # Delivery watchdog: audio >30 min old with no transcript beside it, in the
   # Inbox, or in the archive means MacWhisper isn't transcribing - warn loudly
   # (the old REST delivery once failed silently for three weeks).
@@ -101,7 +123,7 @@ fail=0
 for f in "${candidates[@]}"; do
   echo
   echo "=== $(basename "$f") ==="
-  if voice-transcript "$f" "${ARGS[@]}"; then
+  if voice-transcript "$f" ${VOICE_PIPELINE_AUDIO_ARCHIVE:+--audio-dir "$VOICE_PIPELINE_AUDIO_ARCHIVE"} "${ARGS[@]}"; then
     ok=$((ok + 1))
   else
     fail=$((fail + 1))
