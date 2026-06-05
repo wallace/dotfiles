@@ -288,10 +288,34 @@ def merge_participants(roster_participants, data, people, strict=True):
     return merged
 
 
-def render_transcript(turns, people) -> str:
+def find_audio(stem, audio_dir):
+    """Locate the archived source audio for a transcript stem. Returns the
+    filename (not path) or None."""
+    if not audio_dir:
+        return None
+    d = Path(audio_dir)
+    for ext in ("mp3", "m4a", "wav", "MP3", "M4A", "WAV"):
+        if (d / f"{stem}.{ext}").exists():
+            return f"{stem}.{ext}"
+    return None
+
+
+def ts_link(ts, audio_ref):
+    """Render a timestamp as a Media Extended seek link when audio is known
+    (click -> in-Obsidian player at that moment), else as plain code text."""
+    if not audio_ref:
+        return f"`{ts}`"
+    prefix, fname = audio_ref
+    sec = ts_to_seconds(ts)
+    if sec is None:
+        return f"`{ts}`"
+    return f"[{ts}]({prefix}/{fname}#t={sec})"
+
+
+def render_transcript(turns, people, audio_ref=None) -> str:
     out = []
     for t in turns:
-        ts = f"`{t['ts']}` " if t['ts'] else ''
+        ts = f"{ts_link(t['ts'], audio_ref)} " if t['ts'] else ''
         tag = tag_of(t['name'], people)
         label = f"{t['name']} #{tag}" if tag else t['name']
         if t.get('inferred'):
@@ -512,8 +536,8 @@ Return ONLY valid JSON, no prose, with exactly this schema:
   "topic": "<short, specific meeting topic>",
   "summary": "<3-5 sentences naming the main threads and decisions, including any dates, deadlines, and numbers mentioned>",
   "participants": ["<every person who SPEAKS in the transcript, by name>"],
-  "key_points": ["<each significant decision or conclusion, with its specifics: who, what, when>"],
-  "action_items": [{"owner": "<name>", "task": "<imperative task with a concrete deliverable>", "due": "<stated deadline or empty>", "commitment": "explicit|implied", "project": "<short-slug>"}],
+  "key_points": ["<[MM:SS] each significant decision or conclusion, with its specifics: who, what, when - prefixed with the timestamp of the supporting moment exactly as shown in the transcript>"],
+  "action_items": [{"owner": "<name>", "task": "<imperative task with a concrete deliverable>", "ts": "<MM:SS timestamp of the turn containing the commitment>", "due": "<stated deadline or empty>", "commitment": "explicit|implied", "project": "<short-slug>"}],
   "identity_guesses": [{"clue": "<short quote>", "likely_speaker": "<name>", "confidence": "high|medium|low"}]
 }
 
@@ -674,8 +698,11 @@ def summarize(cfg, transcript_text, roster_block):
     return merge_part_data(datas)
 
 
+KP_TS_RE = re.compile(r'^\s*\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?\s*[-:]?\s*')
+
+
 def render_note(stem, frontmatter, data, recorded, people, recorder=None,
-                transcript_text=None):
+                transcript_text=None, audio_ref=None):
     """
     Render the enriched note. Action items are partitioned by the triage model:
       - "My action items": the recorder's explicit commitments -> checkboxes,
@@ -687,6 +714,9 @@ def render_note(stem, frontmatter, data, recorded, people, recorder=None,
     (used for the "- Clean.md" output so its header matches the Summary note).
     """
     L = [frontmatter, ""]
+    if audio_ref:
+        L.append(f"![[{audio_ref[0]}/{audio_ref[1]}]]")
+        L.append("")
     summary = data.get("summary", "").strip()
     L.append("> [!summary] Summary")
     for line in summary.splitlines() or [""]:
@@ -697,7 +727,12 @@ def render_note(stem, frontmatter, data, recorded, people, recorder=None,
     if kp:
         L.append("## Key points & decisions")
         L.append("")
-        L += [f"- {p}" for p in kp]
+        for p in kp:
+            m = KP_TS_RE.match(p or "")
+            if m:
+                L.append(f"- {ts_link(m.group(1), audio_ref)} {p[m.end():].strip()}")
+            else:
+                L.append(f"- {p}")
         L.append("")
 
     mine, team, followups = [], [], []
@@ -715,6 +750,9 @@ def render_note(stem, frontmatter, data, recorded, people, recorder=None,
         ptag = f" #project/{proj}" if proj else ""
         due = (it.get("due") or "").strip()
         due_s = f" (due: {due})" if due else ""
+        its = (it.get("ts") or "").strip()
+        ts_s = f" {ts_link(its, audio_ref)}" if (its and audio_ref
+                                                 and ts_to_seconds(its) is not None) else ""
         commitment = (it.get("commitment") or "explicit").lower()
         junk_owner = (not owner or owner.startswith("Speaker")
                       or owner.lower() in ("unknown", "unlabeled", "unlabelled"))
@@ -722,11 +760,11 @@ def render_note(stem, frontmatter, data, recorded, people, recorder=None,
             f" #{t}" for t in tags_in(owner, people))
         if commitment != "explicit" or junk_owner:
             who = "" if junk_owner else f"{owner}{owner_tags}: "
-            followups.append(f"- {who}{task}{due_s}{ptag}")
+            followups.append(f"- {who}{task}{due_s}{ptag}{ts_s}")
         elif recorder and owner == recorder:
-            mine.append(f"- [ ] {task}{due_s}{ptag}")
+            mine.append(f"- [ ] {task}{due_s}{ptag}{ts_s}")
         else:
-            team.append(f"- {owner}{owner_tags}: {task}{due_s}{ptag}")
+            team.append(f"- {owner}{owner_tags}: {task}{due_s}{ptag}{ts_s}")
 
     L.append("## My action items")
     L.append("")
@@ -787,6 +825,11 @@ def main():
     ap.add_argument("--profile", default=None,
                     help="Recording profile from speakers.yaml (overrides filename "
                          "match and pass-0 classification).")
+    ap.add_argument("--audio-dir", type=Path, default=None,
+                    help="Vault folder holding archived source audio; enables "
+                         "clickable seek timestamps (Media Extended).")
+    ap.add_argument("--audio-prefix", default="Transcripts/Audio",
+                    help="Vault-relative path used in timestamp links.")
     ap.add_argument("--single-pass", action="store_true",
                     help="Skip pass-1 speaker identification (two-pass is the default).")
     ap.add_argument("--suffix", default="",
@@ -850,13 +893,20 @@ def main():
 
     clean_path = src.with_name(f"{stem} - Clean{args.suffix}.md")
 
+    # Archived source audio -> clickable seek timestamps (Media Extended).
+    audio_fname = find_audio(stem, args.audio_dir)
+    audio_ref = (args.audio_prefix, audio_fname) if audio_fname else None
+    if audio_ref:
+        print(f"[audio] linking timestamps to {args.audio_prefix}/{audio_fname}")
+
     if args.no_llm:
         # No summary available without the LLM: frontmatter + transcript only.
         if args.clean_transcript:
             fm = build_frontmatter(stem, recorded,
                                    participants_from_turns(turns), "", tag_people)
             clean_path.write_text(fm + "\n## Transcript\n\n"
-                                  + render_transcript(turns, tag_people) + "\n")
+                                  + render_transcript(turns, tag_people, audio_ref)
+                                  + "\n")
             print(f"[write] {clean_path}")
         return
 
@@ -907,14 +957,17 @@ def main():
     fm = build_frontmatter(stem, recorded, participants, data.get("topic", ""),
                            tag_people)
 
-    note = render_note(stem, fm, data, recorded, tag_people, recorder=recorder)
+    note = render_note(stem, fm, data, recorded, tag_people, recorder=recorder,
+                       audio_ref=audio_ref)
     out_path = src.with_name(f"{stem} - Summary{args.suffix}.md")
     out_path.write_text(note + "\n")
     print(f"[write] {out_path}")
 
     if args.clean_transcript:
+        display_text = render_transcript(turns, tag_people, audio_ref)
         clean_note = render_note(stem, fm, data, recorded, tag_people,
-                                 recorder=recorder, transcript_text=transcript_text)
+                                 recorder=recorder, transcript_text=display_text,
+                                 audio_ref=audio_ref)
         clean_path.write_text(clean_note + "\n")
         print(f"[write] {clean_path}")
 

@@ -1,15 +1,12 @@
 #!/usr/bin/env bash
-# Installed via GNU stow: this launcher lands at ~/bin/voice-transcript (symlink),
-# and the pipeline code at ~/.local/share/voice-pipeline/ (also stowed).
+# Installed via GNU stow: launcher at ~/bin/voice-transcript (symlink),
+# code at ~/.local/share/voice-pipeline/ (also stowed).
 #
-# Env vars (set in ~/.zshrc or a launchd plist; none are committed):
-#   TRANSCRIPT_ROSTER_DIR   (required) vault folder with people.yaml + speakers.yaml
-#   VOICE_PIPELINE_PYTHON   (optional) absolute interpreter path, e.g. a dedicated
-#                           venv: $HOME/.venvs/voice-pipeline/bin/python. Defaults
-#                           to python3 (pyenv shim in interactive shells). Automation
-#                           (cron/launchd/Hammerspoon) should ALWAYS set this — those
-#                           contexts don't load shell init, so shims aren't on PATH.
-#   VOICE_PIPELINE_DIR      (optional) code location if stowed somewhere non-default.
+# Env vars (set via ~/.config/voice-pipeline/env, sourced by ~/.zshrc):
+#   TRANSCRIPT_ROSTER_DIR          (required) vault folder with people/speakers.yaml
+#   VOICE_PIPELINE_PYTHON          (optional) absolute interpreter (the venv python)
+#   VOICE_PIPELINE_AUDIO_ARCHIVE   (optional) vault audio folder -> clickable timestamps
+#   VOICE_PIPELINE_DIR             (optional) code location if non-default
 set -euo pipefail
 PYTHON="${VOICE_PIPELINE_PYTHON:-python3}"
 CODE_DIR="${VOICE_PIPELINE_DIR:-$HOME/.local/share/voice-pipeline}"
@@ -17,4 +14,5 @@ ROSTER_DIR="${TRANSCRIPT_ROSTER_DIR:?Set TRANSCRIPT_ROSTER_DIR to the vault tran
 exec "$PYTHON" "$CODE_DIR/transcript_pipeline.py" \
   --speakers "$ROSTER_DIR/speakers.yaml" \
   --people   "$ROSTER_DIR/people.yaml" \
+  ${VOICE_PIPELINE_AUDIO_ARCHIVE:+--audio-dir "$VOICE_PIPELINE_AUDIO_ARCHIVE"} \
   "$@"
