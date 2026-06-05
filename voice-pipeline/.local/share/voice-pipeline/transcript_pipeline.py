@@ -307,7 +307,7 @@ def trunc(text, n):
 # --------------------------------------------------------------------------- #
 # Ollama plumbing
 # --------------------------------------------------------------------------- #
-def ollama_generate(cfg, prompt, max_tokens):
+def ollama_generate(cfg, prompt, max_tokens, num_ctx=None):
     payload = {
         "model": cfg["model"],
         "prompt": prompt,
@@ -317,7 +317,7 @@ def ollama_generate(cfg, prompt, max_tokens):
         "options": {
             "temperature": 0,
             "seed": cfg.get("seed", 42),
-            "num_ctx": cfg.get("num_ctx", 32768),
+            "num_ctx": num_ctx or cfg.get("num_ctx", 32768),
             "num_predict": max_tokens,
         },
     }
@@ -430,6 +430,33 @@ CURRENT TURN (speaker: ???): {cur_text}
 
 NEXT TURN (speaker: {next_name}): {next_text}
 """
+
+
+def apply_sandwich(turns, max_run=2):
+    """
+    Deterministic second chance: a short run of unlabelled chunks flanked on
+    both sides by the SAME speaker almost certainly belongs to that speaker -
+    the gap-splitter deliberately over-splits, so these sandwiches are mostly
+    our own segmentation artifacts. Marked inferred. Returns chunks labelled.
+    """
+    n = 0
+    i = 0
+    while i < len(turns):
+        if turns[i]['name'] != 'Unlabeled':
+            i += 1
+            continue
+        j = i
+        while j < len(turns) and turns[j]['name'] == 'Unlabeled':
+            j += 1
+        run = j - i
+        if (run <= max_run and i > 0 and j < len(turns)
+                and turns[i - 1]['name'] == turns[j]['name']):
+            for k in range(i, j):
+                turns[k]['name'] = turns[i - 1]['name']
+                turns[k]['inferred'] = True
+            n += run
+        i = j
+    return n
 
 
 def identify_speakers(cfg, turns, people, roster_block):
@@ -558,29 +585,93 @@ def salvage_json(raw, max_iters=80):
     raise json.JSONDecodeError("salvage failed", raw, 0)
 
 
-def summarize(cfg, transcript_text, roster_block):
-    """
-    Single attempt; if generation hit the token cap (in practice: the model
-    looping, which no budget fixes - a doubled-budget retry on a 32B model
-    also blows the HTTP timeout), salvage the intact JSON prefix instead of
-    retrying or failing.
-    """
-    prompt = PROMPT.replace("{roster}", roster_block) + transcript_text
-    raw, done_reason = ollama_generate(cfg, prompt, cfg.get("max_tokens", 4096))
+def estimate_tokens(text):
+    """Conservative token estimate (~3 chars/token for transcript English)."""
+    return len(text) // 3
+
+
+def split_turns(transcript_text, budget_tokens):
+    """Split a rendered transcript into parts on turn boundaries, each within
+    the token budget."""
+    parts, cur, cur_toks = [], [], 0
+    for turn in transcript_text.split("\n\n"):
+        t = estimate_tokens(turn) + 1
+        if cur and cur_toks + t > budget_tokens:
+            parts.append("\n\n".join(cur))
+            cur, cur_toks = [], 0
+        cur.append(turn)
+        cur_toks += t
+    if cur:
+        parts.append("\n\n".join(cur))
+    return parts
+
+
+def merge_part_data(datas):
+    """Deterministically merge per-part summary JSON; render-time dedupe
+    handles repeated action items."""
+    out = {}
+    out["topic"] = next((d.get("topic") for d in datas if d.get("topic")), "")
+    out["summary"] = " ".join((d.get("summary") or "").strip() for d in datas).strip()
+    out["key_points"] = [p for d in datas for p in (d.get("key_points") or [])]
+    out["action_items"] = [i for d in datas for i in (d.get("action_items") or [])]
+    out["identity_guesses"] = [g for d in datas
+                               for g in (d.get("identity_guesses") or [])][:10]
+    seen = []
+    for d in datas:
+        for p in (d.get("participants") or []):
+            if p not in seen:
+                seen.append(p)
+    out["participants"] = seen
+    return out
+
+
+def summarize_once(cfg, prompt, num_ctx):
+    """One generation; salvage the intact JSON prefix if output hit the token
+    cap (in practice: the model looping, which no budget fixes)."""
+    raw, done_reason = ollama_generate(cfg, prompt, cfg.get("max_tokens", 4096),
+                                       num_ctx=num_ctx)
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
+        print(f"[stage2] unparseable output (done_reason={done_reason!r}); "
+              f"head: {raw[:120]!r}")
         if done_reason == "length":
-            try:
-                data = salvage_json(raw)
-            except json.JSONDecodeError:
-                raise
+            data = salvage_json(raw)
             if data.get("summary"):
-                print("[stage2] WARNING: output hit the token cap (model likely "
-                      "looping); salvaged the intact prefix - tail action items "
-                      "may be missing, review during triage")
+                print("[stage2] WARNING: output hit the token cap; salvaged the "
+                      "intact prefix - tail items may be missing")
                 return data
         raise
+
+
+def summarize(cfg, transcript_text, roster_block):
+    """
+    Fit-aware summarization: bump num_ctx toward the model's true window when a
+    single pass fits; otherwise split the transcript on turn boundaries,
+    summarize each part, and merge deterministically. Prevents Ollama from
+    silently truncating the prompt (which cuts off the schema instructions and
+    yields garbage output).
+    """
+    max_out = cfg.get("max_tokens", 4096)
+    hard_ctx = cfg.get("max_ctx", 40960)        # qwen3 n_ctx_train
+    margin = 1024
+    head = PROMPT.replace("{roster}", roster_block)
+    head_toks = estimate_tokens(head)
+    need = head_toks + estimate_tokens(transcript_text) + max_out + margin
+
+    if need <= hard_ctx:
+        ctx = max(cfg.get("num_ctx", 32768), need)
+        return summarize_once(cfg, head + transcript_text, min(ctx, hard_ctx))
+
+    budget = hard_ctx - head_toks - max_out - margin
+    parts = split_turns(transcript_text, budget)
+    print(f"[stage2] transcript too large for one pass (~{need} tok); "
+          f"summarizing in {len(parts)} parts")
+    datas = []
+    for i, part in enumerate(parts, 1):
+        print(f"[stage2] part {i}/{len(parts)}")
+        datas.append(summarize_once(cfg, head + part, hard_ctx))
+    return merge_part_data(datas)
 
 
 def render_note(stem, frontmatter, data, recorded, people, recorder=None,
@@ -777,10 +868,21 @@ def main():
     if two_pass and prof.get("pass1", True) and cast_people and n_unlabelled:
         try:
             turns = identify_speakers(cfg, turns, cast_people, roster_block)
+            ns = apply_sandwich(turns, cfg.get("sandwich_max_run", 2))
+            if ns:
+                print(f"[pass1] sandwich rule labelled {ns} chunk(s)")
+            turns = merge_adjacent(turns)
+            if (cfg.get("id_second_pass")
+                    and any(t['name'] == 'Unlabeled' for t in turns)):
+                print("[pass1] second-chance round over remaining unlabelled chunks")
+                turns = identify_speakers(cfg, turns, cast_people, roster_block)
+                ns = apply_sandwich(turns, cfg.get("sandwich_max_run", 2))
+                if ns:
+                    print(f"[pass1] sandwich rule labelled {ns} more chunk(s)")
+                turns = merge_adjacent(turns)
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as e:
             sys.exit(f"[pass1] Ollama call failed ({e}). Is the Ollama app running "
                      f"and `{cfg.get('model')}` pulled?")
-        turns = merge_adjacent(turns)
         counts = {}
         for t in turns:
             if t.get('inferred'):
