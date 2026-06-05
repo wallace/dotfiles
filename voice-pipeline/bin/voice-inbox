@@ -31,6 +31,50 @@ for a in "$@"; do
   esac
 done
 
+# Ingest: MacWhisper's watch-folder export writes each transcript .md NEXT TO
+# the audio in untranscribed/ (the destination is not configurable), so sweep
+# them into the Inbox first. Settle guard (-mmin +1) avoids mid-write files;
+# existing Inbox names are never overwritten.
+if [[ -n "${UNTRANSCRIBED_DIR:-}" && -d "$UNTRANSCRIBED_DIR" ]]; then
+  swept=0
+  while IFS= read -r -d '' m; do
+    b="$(basename "$m")"
+    if [[ -e "$INBOX/$b" ]]; then
+      echo "skip ingest: $b (already in Inbox)"
+      continue
+    fi
+    if [[ $DRY -eq 1 ]]; then
+      echo "would ingest: $b"
+      continue
+    fi
+    mv "$m" "$INBOX/$b"
+    swept=$((swept + 1))
+    echo "ingested: $b"
+  done < <(find "$UNTRANSCRIBED_DIR" -maxdepth 1 -type f -iname "*.md" \
+             -mmin +1 -print0 2>/dev/null)
+  (( swept > 0 )) && echo "ingested $swept transcript(s) from untranscribed/" && echo
+
+  # Delivery watchdog: audio >30 min old with no transcript beside it, in the
+  # Inbox, or in the archive means MacWhisper isn't transcribing - warn loudly
+  # (the old REST delivery once failed silently for three weeks).
+  stale=0
+  while IFS= read -r -d '' a; do
+    s="$(basename "$a")"
+    s="${s%.*}"
+    if [[ ! -e "$UNTRANSCRIBED_DIR/$s.md" && ! -e "$INBOX/$s.md"
+          && ! -e "$INBOX/../$s.md" ]]; then
+      echo "WARN: '$s' has audio >30 min old but no transcript anywhere"
+      stale=$((stale + 1))
+    fi
+  done < <(find "$UNTRANSCRIBED_DIR" -maxdepth 1 -type f \
+             \( -iname "*.mp3" -o -iname "*.m4a" -o -iname "*.wav" \) \
+             -mmin +30 -print0 2>/dev/null)
+  if (( stale > 0 )); then
+    echo "WARN: $stale file(s) may be stuck - check MacWhisper (running? watch folder? export format enabled?)"
+    echo
+  fi
+fi
+
 shopt -s nullglob
 candidates=()
 for f in "$INBOX"/*.md; do
