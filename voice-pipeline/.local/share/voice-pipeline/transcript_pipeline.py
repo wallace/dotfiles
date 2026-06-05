@@ -220,6 +220,14 @@ def participants_from_turns(turns):
     return seen
 
 
+def clean_name(name):
+    """Strip #tag echoes the model copies from inline labels ('Jonathan #wallace'
+    -> 'Jonathan') plus '(inferred)' markers and stray whitespace."""
+    name = re.sub(r'#\S+', '', name or '')
+    name = name.replace('(inferred)', '')
+    return ' '.join(name.split())
+
+
 # --- GitHub-handle tagging (deterministic; lets Obsidian search per person) ---
 def tag_of(name: str, people: dict):
     """Bare Obsidian tag (no #) for a known person, else None."""
@@ -270,7 +278,7 @@ def merge_participants(roster_participants, data, people, strict=True):
     extra += [g.get("likely_speaker", "") for g in (data.get("identity_guesses") or [])
               if (g.get("confidence", "") or "").lower() == "high"]
     for name in extra:
-        name = (name or "").strip()
+        name = clean_name(name)
         if (not name or name in merged or name.startswith("Speaker ")
                 or name.lower() in ("unknown", "unlabeled", "unlabelled")):
             continue
@@ -478,7 +486,7 @@ Return ONLY valid JSON, no prose, with exactly this schema:
   "summary": "<3-5 sentences naming the main threads and decisions, including any dates, deadlines, and numbers mentioned>",
   "participants": ["<every person who SPEAKS in the transcript, by name>"],
   "key_points": ["<each significant decision or conclusion, with its specifics: who, what, when>"],
-  "action_items": [{"owner": "<name>", "task": "<imperative task>", "project": "<short-slug>"}],
+  "action_items": [{"owner": "<name>", "task": "<imperative task with a concrete deliverable>", "due": "<stated deadline or empty>", "commitment": "explicit|implied", "project": "<short-slug>"}],
   "identity_guesses": [{"clue": "<short quote>", "likely_speaker": "<name>", "confidence": "high|medium|low"}]
 }
 
@@ -486,15 +494,20 @@ Rules:
 - Use only what is in the transcript. Do not invent facts, names, or tasks.
 - Be specific everywhere: prefer names, dates, deadlines, and concrete numbers over
   generic phrasing. "Most joins done by June 1" is good; "progress on joins" is not.
-- action_items: be EXHAUSTIVE. Capture every commitment, follow-up, or "I'll do X"
-  anyone makes, including those inside "Unlabeled" turns. Meetings like this usually
-  contain 10 or more, but NEVER more than 25. Never repeat an item you have already
-  listed; when you have covered every commitment, stop and close the JSON.
+- action_items: capture commitments, but apply a strict actionability bar.
+  commitment="explicit": the speaker clearly commits to a concrete deliverable
+  ("I'll send the email", "I'll fix that by Friday") or accepts an assignment.
+  commitment="implied": suggestions, aspirations, and status-quo statements -
+  anything built on continue/keep/explore/socialize/look-into with no concrete
+  deliverable or done-state. When in doubt, "implied". NEVER more than 25 items
+  total; never repeat an item; when done, stop and close the JSON.
+- action_items.due: the deadline or timeframe exactly as stated ("Wednesday",
+  "by June 1", "next week"); empty string if none was stated.
 - action_items.owner: BINDING RULE - the owner is the speaker label of the turn
   where the commitment is made (inferred labels count), unless that speaker
   explicitly delegates the task to someone else by name. Do not reassign work to
   whoever the topic "sounds like". Use "Unknown" only for unlabelled turns with
-  no identifiable speaker.
+  no identifiable speaker. Owner is a plain name - never include # tags.
 - identity_guesses: ONLY for turns still labelled "Unlabeled". At most 10 entries;
   keep each clue under 12 words. Infer from address, hand-offs, or topic ownership.
   CRITICAL: a speaker cannot be someone they address or hand off to ("Robbie, your
@@ -570,12 +583,17 @@ def summarize(cfg, transcript_text, roster_block):
         raise
 
 
-def render_note(stem, frontmatter, data, recorded, people, transcript_text=None):
+def render_note(stem, frontmatter, data, recorded, people, recorder=None,
+                transcript_text=None):
     """
-    Render the enriched note: summary callout, key points, deduped action items,
-    identity guesses - and, if transcript_text is given, the full relabelled
-    transcript below the summary sections (used for the "- Clean.md" output so
-    its header matches the Summary note).
+    Render the enriched note. Action items are partitioned by the triage model:
+      - "My action items": the recorder's explicit commitments -> checkboxes,
+        the only tickable tasks (Obsidian task queries see just these candidates)
+      - "Team commitments": others' explicit commitments -> plain bullets
+      - "Possible follow-ups": implied/aspirational items and junk-owner items
+        -> plain bullets
+    If transcript_text is given, the full relabelled transcript is appended
+    (used for the "- Clean.md" output so its header matches the Summary note).
     """
     L = [frontmatter, ""]
     summary = data.get("summary", "").strip()
@@ -591,26 +609,48 @@ def render_note(stem, frontmatter, data, recorded, people, transcript_text=None)
         L += [f"- {p}" for p in kp]
         L.append("")
 
-    ai = data.get("action_items") or []
-    L.append("## Action items")
-    L.append("")
+    mine, team, followups = [], [], []
     seen = set()
-    n_items = 0
-    for it in ai:
-        owner = (it.get("owner") or "Unknown").strip()
+    for it in (data.get("action_items") or []):
+        owner = clean_name(it.get("owner") or "Unknown")
         task = (it.get("task") or "").strip()
+        if not task:
+            continue
         key = (owner.lower(), task.lower())
-        if not task or key in seen:               # dedupe degenerate repeats
+        if key in seen:                            # dedupe degenerate repeats
             continue
         seen.add(key)
-        n_items += 1
         proj = (it.get("project") or "").strip()
         ptag = f" #project/{proj}" if proj else ""
-        owner_tags = "".join(f" #{t}" for t in tags_in(owner, people))
-        L.append(f"- [ ] {owner}{owner_tags}: {task}{ptag}")
-    if not n_items:
-        L.append("- [ ] (none extracted)")
+        due = (it.get("due") or "").strip()
+        due_s = f" (due: {due})" if due else ""
+        commitment = (it.get("commitment") or "explicit").lower()
+        junk_owner = (not owner or owner.startswith("Speaker")
+                      or owner.lower() in ("unknown", "unlabeled", "unlabelled"))
+        owner_tags = "" if junk_owner else "".join(
+            f" #{t}" for t in tags_in(owner, people))
+        if commitment != "explicit" or junk_owner:
+            who = "" if junk_owner else f"{owner}{owner_tags}: "
+            followups.append(f"- {who}{task}{due_s}{ptag}")
+        elif recorder and owner == recorder:
+            mine.append(f"- [ ] {task}{due_s}{ptag}")
+        else:
+            team.append(f"- {owner}{owner_tags}: {task}{due_s}{ptag}")
+
+    L.append("## My action items")
     L.append("")
+    L += mine if mine else ["- (none)"]
+    L.append("")
+    if team:
+        L.append("## Team commitments")
+        L.append("")
+        L += team
+        L.append("")
+    if followups:
+        L.append("## Possible follow-ups")
+        L.append("")
+        L += followups
+        L.append("")
 
     ig = data.get("identity_guesses") or []
     if ig:
@@ -619,7 +659,7 @@ def render_note(stem, frontmatter, data, recorded, people, transcript_text=None)
         L.append("| Clue | Likely speaker | Confidence |")
         L.append("|---|---|---|")
         for g in ig:
-            spk = g.get('likely_speaker', '')
+            spk = clean_name(g.get('likely_speaker', ''))
             t = tag_of(spk, people)
             spk_cell = f"{spk} #{t}" if t else spk
             L.append(f"| {g.get('clue','')} | {spk_cell} | {g.get('confidence','')} |")
@@ -765,14 +805,14 @@ def main():
     fm = build_frontmatter(stem, recorded, participants, data.get("topic", ""),
                            tag_people)
 
-    note = render_note(stem, fm, data, recorded, tag_people)
+    note = render_note(stem, fm, data, recorded, tag_people, recorder=recorder)
     out_path = src.with_name(f"{stem} - Summary{args.suffix}.md")
     out_path.write_text(note + "\n")
     print(f"[write] {out_path}")
 
     if args.clean_transcript:
         clean_note = render_note(stem, fm, data, recorded, tag_people,
-                                 transcript_text=transcript_text)
+                                 recorder=recorder, transcript_text=transcript_text)
         clean_path.write_text(clean_note + "\n")
         print(f"[write] {clean_path}")
 
