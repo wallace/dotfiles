@@ -26,6 +26,15 @@ set -euo pipefail
 # Ensure Homebrew bins are on PATH for the same reason as sync-ic-recorder.sh.
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
+# Pick up the private machine config (VOICE_PIPELINE_ACTION, audio archive
+# location, etc.) so the LaunchAgent doesn't need env vars in its plist.
+if [[ -f "$HOME/.config/voice-pipeline/env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$HOME/.config/voice-pipeline/env"
+  set +a
+fi
+
 ACTION="${VOICE_PIPELINE_ACTION:-delete}"   # "delete" | "move"
 
 # shellcheck source=./dropbox-base.sh
@@ -34,7 +43,9 @@ resolve_dropbox_base || exit 1
 
 OBSIDIAN_INBOX="${OBSIDIAN_INBOX:-$HOME/Documents/first-obsidian/Transcripts/Inbox}"
 UNTRANSCRIBED="$DROPBOX_BASE/voice-memos/untranscribed"
-ARCHIVE="$DROPBOX_BASE/voice-memos/transcribed"
+# With clickable transcript timestamps, audio is archived into the Obsidian
+# vault (VOICE_PIPELINE_AUDIO_ARCHIVE) so Media Extended links resolve.
+ARCHIVE="${VOICE_PIPELINE_AUDIO_ARCHIVE:-$DROPBOX_BASE/voice-memos/transcribed}"
 LOG="$HOME/Library/Logs/voice-pipeline.log"
 
 mkdir -p "$(dirname "$LOG")"
