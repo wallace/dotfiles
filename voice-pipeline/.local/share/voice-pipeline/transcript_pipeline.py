@@ -488,7 +488,8 @@ Rules:
   generic phrasing. "Most joins done by June 1" is good; "progress on joins" is not.
 - action_items: be EXHAUSTIVE. Capture every commitment, follow-up, or "I'll do X"
   anyone makes, including those inside "Unlabeled" turns. Meetings like this usually
-  contain 10 or more. Do not repeat an item you have already listed.
+  contain 10 or more, but NEVER more than 25. Never repeat an item you have already
+  listed; when you have covered every commitment, stop and close the JSON.
 - action_items.owner: BINDING RULE - the owner is the speaker label of the turn
   where the commitment is made (inferred labels count), unless that speaker
   explicitly delegates the task to someone else by name. Do not reassign work to
@@ -505,8 +506,51 @@ TRANSCRIPT:
 """
 
 
+def salvage_json(raw, max_iters=80):
+    """
+    Best-effort repair of truncated JSON: close any open string, balance open
+    brackets, and if that fails progressively drop the trailing (incomplete)
+    element. Recovers the intact prefix of a generation that hit the token cap.
+    """
+    s = raw
+    for _ in range(max_iters):
+        candidate = s.rstrip().rstrip(',')
+        stack, in_str, esc = [], False, False
+        for ch in candidate:
+            if in_str:
+                if esc:
+                    esc = False
+                elif ch == '\\':
+                    esc = True
+                elif ch == '"':
+                    in_str = False
+            else:
+                if ch == '"':
+                    in_str = True
+                elif ch in '{[':
+                    stack.append(ch)
+                elif ch in '}]':
+                    if stack:
+                        stack.pop()
+        cand = candidate + ('"' if in_str else '')
+        cand = cand.rstrip().rstrip(',')
+        cand += ''.join('}' if c == '{' else ']' for c in reversed(stack))
+        try:
+            return json.loads(cand)
+        except json.JSONDecodeError:
+            cut = max(s.rfind(','), s.rfind('{'), s.rfind('['))
+            if cut <= 0:
+                raise
+            s = s[:cut]
+    raise json.JSONDecodeError("salvage failed", raw, 0)
+
+
 def summarize(cfg, transcript_text, roster_block):
-    """One retry with a doubled token budget if generation was cut off mid-JSON."""
+    """
+    One retry with a doubled token budget if generation was cut off mid-JSON;
+    if the retry truncates too (runaway/looping generation), salvage the intact
+    prefix rather than failing the file.
+    """
     prompt = PROMPT.replace("{roster}", roster_block) + transcript_text
     budget = cfg.get("max_tokens", 4096)
     for attempt in (1, 2):
@@ -519,7 +563,10 @@ def summarize(cfg, transcript_text, roster_block):
                       f"retrying with {budget * 2}")
                 budget *= 2
                 continue
-            raise
+            data = salvage_json(raw)
+            print("[stage2] WARNING: output truncated again; salvaged the intact "
+                  "prefix - tail action items may be missing, review during triage")
+            return data
 
 
 def render_note(stem, frontmatter, data, recorded, people, transcript_text=None):
