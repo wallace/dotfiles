@@ -25,6 +25,10 @@
 # Requires: Full Disk Access for the invoking process (the Group Container is
 # TCC-protected).
 #
+# Note: transcripts are delivered by MacWhisper writing Segments markdown
+# directly into the Obsidian Inbox folder (not the Local REST API), so
+# delivery does not depend on Obsidian running.
+#
 # Usage:
 #   sync-voice-memos.sh [--dry-run] [source-dir]
 #   --dry-run   list what would be copied, write nothing
