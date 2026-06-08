@@ -97,7 +97,26 @@ if [[ -n "${UNTRANSCRIBED_DIR:-}" && -d "$UNTRANSCRIBED_DIR" ]]; then
   fi
 fi
 
+# Collapsed-timestamp detector: a healthy transcript's *MM:SS* markers climb
+# across the recording. When they freeze near the start (VBR header confusing
+# MacWhisper) the whole pipeline degrades silently - few speakers, no usable
+# seek links. Warn when the last timestamp is under 2 min but the file has many
+# segments (i.e. it's clearly longer than that).
 shopt -s nullglob
+for m in "$INBOX"/*.md; do
+  case "$(basename "$m")" in *" - "*|README.md) continue ;; esac
+  last="$(grep -oE '^\*[0-9:]+\*$' "$m" | tail -1 | tr -d '*')"
+  segs="$(grep -cE '^\*[0-9:]+\*$' "$m")"
+  [[ -z "$last" ]] && continue
+  IFS=: read -ra p <<< "$last"
+  if (( ${#p[@]} == 2 )); then secs=$(( 10#${p[0]}*60 + 10#${p[1]} ))
+  else secs=$(( 10#${p[0]}*3600 + 10#${p[1]}*60 + 10#${p[2]} )); fi
+  if (( segs > 60 && secs < 120 )); then
+    echo "WARN: $(basename "$m") timestamps stall at ${last} across ${segs} segments"
+    echo "      -> likely VBR-header / collapsed timestamps; re-encode the audio (CBR) and re-transcribe"
+  fi
+done
+
 candidates=()
 for f in "$INBOX"/*.md; do
   base="$(basename "$f" .md)"
