@@ -41,9 +41,12 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 DRY_RUN=0
 SRC=""
+SINCE=""
 for a in "$@"; do
   case "$a" in
     --dry-run) DRY_RUN=1 ;;
+    --since=*) SINCE="${a#--since=}" ;;        # YYYYMMDD: skip recordings older than this
+    --all)     SINCE="" ;;                     # explicit: consider the whole library
     *) SRC="$a" ;;
   esac
 done
@@ -69,8 +72,19 @@ ts() { date "+%Y-%m-%d %H:%M:%S"; }
   (( DRY_RUN )) && echo "[$(ts)] DRY RUN - nothing will be written"
 
   if [[ ! -d "$SRC" ]]; then
-    echo "[$(ts)] ERROR: Voice Memos folder not found (or no Full Disk Access for this process)"
+    echo "[$(ts)] ERROR: Voice Memos folder not found at $SRC"
     exit 2
+  fi
+
+  # Distinguish "can't read the folder" (TCC / no Full Disk Access) from "folder
+  # is empty". The find loop below suppresses stderr, which would otherwise turn
+  # a permissions denial into a misleading processed=0.
+  if ! ls "$SRC" >/dev/null 2>&1; then
+    echo "[$(ts)] ERROR: cannot read $SRC (Operation not permitted)."
+    echo "[$(ts)]   This terminal lacks Full Disk Access. Fix: System Settings >"
+    echo "[$(ts)]   Privacy & Security > Full Disk Access > enable your terminal,"
+    echo "[$(ts)]   restart it, and 'tmux kill-server' if running inside tmux."
+    exit 3
   fi
 
   processed=0
@@ -80,8 +94,25 @@ ts() { date "+%Y-%m-%d %H:%M:%S"; }
   skipped=0
 
   while IFS= read -r -d '' f; do
+    bn="$(basename "$f")"
+    # Voice Memos names files by recording datetime: "YYYYMMDD HHMMSS[-HEX].ext".
+    # Parse that for the canonical name (birth time is unreliable - iCloud
+    # re-materializes the whole library locally on one day, collapsing every
+    # file's birth time to the same value). Fall back to birth time only if the
+    # filename doesn't match.
+    if [[ "$bn" =~ ^([0-9]{4})([0-9]{2})([0-9]{2})\ ([0-9]{2})([0-9]{2}) ]]; then
+      ymd="${BASH_REMATCH[1]}${BASH_REMATCH[2]}${BASH_REMATCH[3]}"   # YYYYMMDD
+      name="${BASH_REMATCH[1]:2}${BASH_REMATCH[2]}${BASH_REMATCH[3]}_${BASH_REMATCH[4]}${BASH_REMATCH[5]}"
+    else
+      ymd="$(stat -f %SB -t %Y%m%d "$f")"
+      name="$(stat -f %SB -t %y%m%d_%H%M "$f")"
+    fi
+    # --since guard: skip recordings older than the cutoff so a routine run
+    # never bulk-imports years of personal memos.
+    if [[ -n "$SINCE" && "$ymd" < "$SINCE" ]]; then
+      continue
+    fi
     processed=$((processed + 1))
-    name="$(stat -f %SB -t %y%m%d_%H%M "$f")"
     dest_path="$DEST/$name.m4a"
 
     if [[ -f "$OBSIDIAN_INBOX/$name.md" ]]; then
