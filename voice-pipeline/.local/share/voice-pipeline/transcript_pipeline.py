@@ -710,9 +710,13 @@ def render_note(stem, frontmatter, data, recorded, people, recorder=None,
       - "Team commitments": others' explicit commitments -> plain bullets
       - "Possible follow-ups": implied/aspirational items and junk-owner items
         -> plain bullets
-    If transcript_text is given, the full relabelled transcript is appended
-    (used for the "- Clean.md" output so its header matches the Summary note).
+    If transcript_text is given, this is the "- Clean.md" variant: the full
+    relabelled transcript is appended, and "My action items" render as plain
+    bullets (not checkboxes) so the canonical Summary note is the ONLY source
+    of tickable todos - otherwise every task is double-counted in task queries.
     """
+    as_tasks = transcript_text is None      # Summary -> checkboxes; Clean -> bullets
+    box = "- [ ] " if as_tasks else "- "
     L = [frontmatter, ""]
     if audio_ref:
         L.append(f"![[{audio_ref[0]}/{audio_ref[1]}]]")
@@ -762,7 +766,7 @@ def render_note(stem, frontmatter, data, recorded, people, recorder=None,
             who = "" if junk_owner else f"{owner}{owner_tags}: "
             followups.append(f"- {who}{task}{due_s}{ptag}{ts_s}")
         elif recorder and owner == recorder:
-            mine.append(f"- [ ] {task}{due_s}{ptag}{ts_s}")
+            mine.append(f"{box}{task}{due_s}{ptag}{ts_s}")
         else:
             team.append(f"- {owner}{owner_tags}: {task}{due_s}{ptag}{ts_s}")
 
