@@ -99,7 +99,7 @@ export LESS="-RSM~gIsw"
 
 # FZF configuration (with more focused search)
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-export FZF_DEFAULT_COMMAND='rg --files --glob "!.git/*"'
+export FZF_DEFAULT_COMMAND='rg --files --hidden --glob "!.git/*"'
 export FZF_COMPLETION_TRIGGER=',,'
 
 # Vi mode configuration
