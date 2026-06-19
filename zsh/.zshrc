@@ -162,3 +162,34 @@ grebase() {
 export TRANSCRIPT_ROSTER_DIR="$HOME/Documents/first-obsidian/03-Projects/transcript-pipeline"
 export VOICE_PIPELINE_PYTHON="$HOME/.venvs/voice-pipeline/bin/python"
 [ -f "$HOME/.config/voice-pipeline/env" ] && { set -a; source "$HOME/.config/voice-pipeline/env"; set +a; }
+
+# ─── Copilot CLI: lean by default, load MCP servers & skills on demand ────────
+#
+# Default session loads NO MCP servers and NO custom skills. Sources & switches:
+#   - User MCP servers   : ~/.copilot/mcp-config.json is empty (all moved to snippets)
+#   - Built-in MCP        : github-mcp-server / computer-use -> off via the alias below
+#   - Port MCP + skill    : port@agent-skills plugin disabled in ~/.copilot/settings.json
+#   - Custom skills       : ~/.copilot/skills/ is empty (all moved to the library)
+#   - Repo workspace MCP  : .github/mcp.json in a repo still loads; silence per-session with
+#                           `copilot --disable-mcp-server <name>` (e.g. github-agentic-workflows)
+#
+# Library locations:
+#   MCP snippets : ~/.copilot/snippets/mcp/<name>.json   (one server each)
+#   Skills       : ~/.copilot/snippets/skills/<name>/    (each has a SKILL.md)
+#
+# Load things on demand with the copilot-load helper (~/.local/bin/copilot-load):
+#   copilot-load list                                  # show available MCP + skills
+#   copilot-load run --mcp datadog,splunk              # start with these MCP servers
+#   copilot-load run --skill identify-noisy-neighbor   # start with this skill
+#   copilot-load run --mcp datadog --skill adversarial-review -- -p "..."  # args after --
+#
+# Add new items interactively (prompts for details):
+#   copilot-load add-mcp        # name, http/local, url or command+args, headers/env
+#   copilot-load add-skill      # name, then copy a folder or scaffold a new SKILL.md
+#
+# Mid-session toggles inside Copilot: /mcp (servers), /skills (skills), /plugin (Port),
+# and /env to see everything currently loaded.
+#
+# Restore-all (undo the lean defaults): copy back the newest backups -
+#   ~/.copilot/mcp-config.json.bak.*  and  ~/.copilot/settings.json.bak.*
+alias copilot='copilot --disable-builtin-mcps'
