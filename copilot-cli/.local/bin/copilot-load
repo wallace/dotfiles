@@ -1,0 +1,266 @@
+#!/usr/bin/env bash
+#
+# copilot-load - launch Copilot CLI with selected MCP servers and/or skills.
+#
+# MCP servers are loaded per-session via --additional-mcp-config (no persistence).
+# Skills are symlinked into the active skills dir for the run, then removed on exit.
+#
+# Libraries:
+#   MCP snippets : $COPILOT_HOME/snippets/mcp/<name>.json
+#   Skills       : $COPILOT_HOME/snippets/skills/<name>/
+#
+# Usage:
+#   copilot-load list
+#   copilot-load run [--mcp a,b] [--skill c,d] [-- <extra copilot args>]
+#   copilot-load run --mcp datadog,splunk --skill identify-noisy-neighbor
+#   copilot-load add-mcp      # interactively add an MCP server snippet
+#   copilot-load add-skill    # interactively add a skill to the library
+#
+# Anything after `--` (or any unrecognized arg) is passed straight to copilot.
+
+set -eo pipefail
+
+COPILOT_DIR="${COPILOT_HOME:-$HOME/.copilot}"
+SNIP="$COPILOT_DIR/snippets"
+MCP_DIR="$SNIP/mcp"
+SKILL_LIB="$SNIP/skills"
+ACTIVE_SKILLS="$COPILOT_DIR/skills"
+
+usage() {
+  cat <<'USAGE'
+copilot-load - load Copilot CLI MCP servers and skills on demand.
+
+Commands:
+  list                                  Show available MCP snippets and skills
+  run [--mcp a,b] [--skill c,d] [-- ..] Launch copilot with the selected items
+  add-mcp                               Interactively add an MCP server snippet
+  add-skill                             Interactively add a skill to the library
+  help                                  Show this help
+
+Examples:
+  copilot-load run --mcp datadog,splunk --skill identify-noisy-neighbor
+  copilot-load run --mcp datadog -- -p "summarize errors"
+  copilot-load add-mcp
+  copilot-load add-skill
+
+Libraries:
+  MCP snippets : $COPILOT_HOME/snippets/mcp/<name>.json   (default ~/.copilot)
+  Skills       : $COPILOT_HOME/snippets/skills/<name>/
+USAGE
+}
+
+# prompt VAR "message" [default]
+prompt() {
+  local __var="$1" __msg="$2" __def="${3:-}" __in
+  if [ -n "$__def" ]; then
+    read -r -p "$__msg [$__def]: " __in
+    __in="${__in:-$__def}"
+  else
+    read -r -p "$__msg: " __in
+  fi
+  printf -v "$__var" '%s' "$__in"
+}
+
+# collect_lines "message" -> prints entered lines (blank line ends input)
+collect_lines() {
+  local __msg="$1" __line __acc=""
+  printf '%s (one per line, blank line to finish):\n' "$__msg" >&2
+  while true; do
+    read -r -p "  > " __line || break
+    [ -z "$__line" ] && break
+    __acc="$__acc$__line"$'\n'
+  done
+  printf '%s' "$__acc"
+}
+
+add_mcp_cmd() {
+  mkdir -p "$MCP_DIR"
+  local name type url cmd headers envs args out ow
+  prompt name "Server name (e.g. datadog)"
+  [ -z "$name" ] && { echo "error: name is required" >&2; exit 1; }
+  out="$MCP_DIR/$name.json"
+  if [ -e "$out" ]; then
+    read -r -p "Snippet '$name' already exists. Overwrite? [y/N]: " ow
+    case "$ow" in y|Y) ;; *) echo "aborted"; exit 0 ;; esac
+  fi
+  prompt type "Transport: http or local (stdio)" "http"
+  case "$type" in
+    http)
+      prompt url "Server URL"
+      [ -z "$url" ] && { echo "error: url is required for http" >&2; exit 1; }
+      headers=$(collect_lines "Headers as KEY=VALUE, e.g. Authorization=Token abc123")
+      ;;
+    local)
+      prompt cmd "Command to run (e.g. npx, docker, uvx)"
+      [ -z "$cmd" ] && { echo "error: command is required for local" >&2; exit 1; }
+      args=$(collect_lines "Arguments")
+      envs=$(collect_lines "Environment vars as KEY=VALUE")
+      ;;
+    *)
+      echo "error: type must be 'http' or 'local'" >&2; exit 1 ;;
+  esac
+
+  NAME="$name" TYPE="$type" URL="${url:-}" CMD="${cmd:-}" \
+  HEADERS="${headers:-}" ARGS="${args:-}" ENVS="${envs:-}" \
+  python3 - "$out" <<'PY'
+import json, os, sys
+out = sys.argv[1]
+t = os.environ["TYPE"]
+spec = {"tools": ["*"]}
+def kv(blob):
+    d = {}
+    for line in blob.splitlines():
+        line = line.strip()
+        if not line or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        d[k.strip()] = v.strip()
+    return d
+if t == "http":
+    spec["type"] = "http"
+    spec["url"] = os.environ["URL"]
+    spec["headers"] = kv(os.environ.get("HEADERS", ""))
+else:
+    spec["type"] = "local"
+    spec["command"] = os.environ["CMD"]
+    a = [l.strip() for l in os.environ.get("ARGS", "").splitlines() if l.strip()]
+    if a:
+        spec["args"] = a
+    e = kv(os.environ.get("ENVS", ""))
+    if e:
+        spec["env"] = e
+with open(out, "w") as f:
+    json.dump({"mcpServers": {os.environ["NAME"]: spec}}, f, indent=2)
+    f.write("\n")
+os.chmod(out, 0o600)
+print(f"Wrote {out} (perms 600)")
+PY
+  echo "Load it with: copilot-load run --mcp $name"
+}
+
+add_skill_cmd() {
+  mkdir -p "$SKILL_LIB"
+  local name path dst desc ow
+  prompt name "Skill name (folder name, e.g. my-skill)"
+  [ -z "$name" ] && { echo "error: name is required" >&2; exit 1; }
+  dst="$SKILL_LIB/$name"
+  if [ -e "$dst" ]; then
+    read -r -p "Skill '$name' already exists. Overwrite? [y/N]: " ow
+    case "$ow" in y|Y) rm -rf "$dst" ;; *) echo "aborted"; exit 0 ;; esac
+  fi
+  prompt path "Path to an existing skill folder (blank to scaffold a new one)"
+  if [ -n "$path" ]; then
+    path="${path/#\~/$HOME}"
+    [ -d "$path" ] || { echo "error: not a directory: $path" >&2; exit 1; }
+    cp -R "$path" "$dst"
+    [ -f "$dst/SKILL.md" ] || echo "warning: copied folder has no SKILL.md" >&2
+    echo "Copied skill into $dst"
+  else
+    prompt desc "One-line description (used by Copilot to decide when to load it)"
+    mkdir -p "$dst"
+    cat > "$dst/SKILL.md" <<EOF
+---
+name: $name
+description: $desc
+---
+
+# $name
+
+$desc
+
+## Instructions
+
+(Describe what this skill should do step by step.)
+EOF
+    echo "Scaffolded $dst/SKILL.md - edit it to add instructions."
+  fi
+  echo "Load it with: copilot-load run --skill $name"
+}
+
+list_cmd() {
+  echo "MCP servers ($MCP_DIR):"
+  if [ -d "$MCP_DIR" ]; then
+    for f in "$MCP_DIR"/*.json; do
+      [ -e "$f" ] || { echo "  (none)"; break; }
+      b=$(basename "$f"); echo "  ${b%.json}"
+    done
+  else
+    echo "  (none)"
+  fi
+  echo
+  echo "Skills ($SKILL_LIB):"
+  if [ -d "$SKILL_LIB" ]; then
+    found=0
+    for d in "$SKILL_LIB"/*/; do
+      [ -d "$d" ] || continue
+      found=1; echo "  $(basename "$d")"
+    done
+    [ "$found" -eq 1 ] || echo "  (none)"
+  else
+    echo "  (none)"
+  fi
+}
+
+run_cmd() {
+  mcps=""
+  skills=""
+  extra=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --mcp)   mcps="$mcps,${2:?--mcp needs a value}"; shift 2 ;;
+      --skill) skills="$skills,${2:?--skill needs a value}"; shift 2 ;;
+      --)      shift; extra+=("$@"); break ;;
+      *)       extra+=("$1"); shift ;;
+    esac
+  done
+
+  args=()
+
+  # MCP servers -> --additional-mcp-config flags
+  IFS=',' read -ra mcp_arr <<< "$mcps"
+  for m in "${mcp_arr[@]}"; do
+    [ -z "$m" ] && continue
+    f="$MCP_DIR/$m.json"
+    if [ ! -f "$f" ]; then
+      echo "error: no MCP snippet '$m' ($f)" >&2; exit 1
+    fi
+    args+=(--additional-mcp-config "@$f")
+  done
+
+  # Skills -> temporary symlinks into the active skills dir
+  created=()
+  cleanup() {
+    for d in ${created[@]+"${created[@]}"}; do
+      [ -L "$d" ] && rm -f "$d"
+    done
+  }
+  trap cleanup EXIT INT TERM
+
+  IFS=',' read -ra skill_arr <<< "$skills"
+  for s in "${skill_arr[@]}"; do
+    [ -z "$s" ] && continue
+    src="$SKILL_LIB/$s"
+    if [ ! -d "$src" ]; then
+      echo "error: no skill '$s' ($src)" >&2; exit 1
+    fi
+    mkdir -p "$ACTIVE_SKILLS"
+    dst="$ACTIVE_SKILLS/$s"
+    if [ -e "$dst" ]; then
+      echo "note: skill '$s' already present in active dir, leaving as-is" >&2
+    else
+      ln -s "$src" "$dst"
+      created+=("$dst")
+    fi
+  done
+
+  copilot ${args[@]+"${args[@]}"} ${extra[@]+"${extra[@]}"}
+}
+
+case "${1:-}" in
+  ""|-h|--help|help) usage ;;
+  list)              shift; list_cmd ;;
+  run)               shift; run_cmd "$@" ;;
+  add-mcp)           shift; add_mcp_cmd ;;
+  add-skill)         shift; add_skill_cmd ;;
+  *)                 echo "unknown command: $1" >&2; echo; usage; exit 1 ;;
+esac
