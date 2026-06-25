@@ -1,0 +1,675 @@
+#!/usr/bin/env python3
+"""
+issue-report — Deterministic, end-to-end GitHub issue triage /
+responsiveness report for an arbitrary repository.
+
+One command does the whole loop with no human-in-the-loop and no MCP: given a
+repo and a window, the script dumps the issues itself via the `gh` CLI, then
+renders a Markdown report. The repo and window are plain flags, so there is no
+interactive prompting and the run is reproducible. It works in any session.
+
+Two modes:
+  * FETCH (default when --repo is given): run `gh issue list` for --repo, save
+    the raw dump under the data dir, then render. Deterministic given the repo
+    state and the window flags.
+  * REPLAY: point --input-dir at an existing dump (no network) and render. Same
+    output as the fetch that produced that dump.
+
+Data dir layout (--input-dir, auto-created when fetching):
+    <input-dir>/
+      issues/   one or more `gh issue list --json ...` dumps (*.json)
+
+Each issues file may be either:
+  * the raw JSON array `gh issue list --json ...` returns, or
+  * a single issue object, or
+  * an object with an "issues" key wrapping the array.
+
+JSON fields fetched / required for full output:
+    number,title,url,state,stateReason,createdAt,closedAt,updatedAt,
+    labels,author,assignees,comments
+
+Window selection (pick one; default = rolling 4 weeks ending now). Filters on
+each issue's createdAt:
+    --weeks N            rolling N-week window ending at --now (default 4)
+    --month YYYY-MM      a single calendar month (UTC)
+    --oldest TS --latest TS   explicit unix timestamps
+    --month-to-month     bucket the trend by calendar month instead of ISO week
+
+Usage:
+    # fetch + render in one shot (deterministic given repo + window)
+    issue-report --repo owner/name --out report.md
+    issue-report --repo owner/name --month 2026-05
+    issue-report --repo owner/name --oldest 1779987481 --latest 1782406681
+    # replay an existing dump, no network
+    issue-report --input-dir ./data --repo owner/name --no-fetch
+"""
+
+import argparse
+import glob
+import json
+import os
+import re
+import subprocess
+import sys
+from collections import defaultdict
+from datetime import datetime, timezone
+
+# --------------------------------------------------------------------------- #
+# Configuration (overridable via --config JSON)
+# --------------------------------------------------------------------------- #
+
+# How many open days with no update before an issue is "stale".
+DEFAULT_STALE_DAYS = 30
+
+# How many rows to show in "top N" tables.
+TOP_N = 15
+
+# Bot detection. Issue authors expose `is_bot`; comment authors only expose
+# `login`, so we also match a name pattern. Replies/issues from bots are
+# excluded from the human denominators and from TTFR.
+BOT_LOGIN_RE = re.compile(
+    r"(?i)(\[bot\]$|-bot$|^bot$|^dependabot|^github-actions|^copilot$"
+    r"|^renovate|^mergify|^codecov|^sentry-io|^stale)"
+)
+
+# Default number of issues to pull in fetch mode (override with --limit).
+DEFAULT_FETCH_LIMIT = 1000
+
+# JSON fields requested from `gh issue list`. Keep in sync with normalize().
+GH_FIELDS = [
+    "number", "title", "url", "state", "stateReason", "createdAt",
+    "closedAt", "updatedAt", "labels", "author", "assignees", "comments",
+]
+
+# --------------------------------------------------------------------------- #
+# Parsing
+# --------------------------------------------------------------------------- #
+
+
+def parse_iso(s):
+    """ISO-8601 ('2026-06-25T16:26:27Z') -> unix ts, or None."""
+    if not s:
+        return None
+    try:
+        dt = datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        return dt.timestamp()
+    except (ValueError, TypeError):
+        try:
+            return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+        except (ValueError, TypeError):
+            return None
+
+
+def is_bot_login(login):
+    return bool(login and BOT_LOGIN_RE.search(login))
+
+
+def _coerce_issue_list(obj):
+    if isinstance(obj, list):
+        return obj
+    if isinstance(obj, dict):
+        if "issues" in obj and isinstance(obj["issues"], list):
+            return obj["issues"]
+        if "number" in obj:  # a single issue object
+            return [obj]
+    return []
+
+
+def load_inputs(input_dir):
+    issues = {}
+    paths = sorted(glob.glob(os.path.join(input_dir, "issues", "*.json")))
+    # Also accept dumps placed directly in the input dir.
+    paths += sorted(glob.glob(os.path.join(input_dir, "*.json")))
+    for p in paths:
+        if not os.path.isfile(p):
+            continue
+        try:
+            with open(p, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (json.JSONDecodeError, OSError):
+            continue
+        for iss in _coerce_issue_list(data):
+            num = iss.get("number")
+            if num is not None:
+                issues[num] = iss  # de-dupe by number (later files win)
+    return list(issues.values())
+
+
+def fetch_issues(repo, limit, search, dest_dir):
+    """Run `gh issue list` for `repo`, save the raw dump under dest_dir/issues/,
+    and return the parsed issue list. Deterministic given the repo state."""
+    cmd = [
+        "gh", "issue", "list", "-R", repo, "--state", "all",
+        "--limit", str(limit), "--json", ",".join(GH_FIELDS),
+    ]
+    if search:
+        cmd += ["--search", search]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except FileNotFoundError:
+        sys.exit("ERROR: `gh` CLI not found on PATH. Install it or use "
+                 "--input-dir/--no-fetch to replay an existing dump.")
+    except subprocess.CalledProcessError as e:
+        sys.exit(f"ERROR: `gh issue list` failed (exit {e.returncode}):\n"
+                 f"{e.stderr.strip()}")
+    try:
+        data = json.loads(proc.stdout or "[]")
+    except json.JSONDecodeError as e:
+        sys.exit(f"ERROR: could not parse `gh` JSON output: {e}")
+
+    issues_dir = os.path.join(dest_dir, "issues")
+    os.makedirs(issues_dir, exist_ok=True)
+    out_path = os.path.join(issues_dir, "issues.json")
+    with open(out_path, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, sort_keys=True)
+    print(f"Fetched {len(data)} issue(s) from {repo} -> {out_path}",
+          file=sys.stderr)
+    return _coerce_issue_list(data)
+
+
+def _default_data_dir(repo, now):
+    """Reproducible per-repo, per-day data dir used when fetching without an
+    explicit --input-dir. Lives under XDG cache (NOT the cwd), so running the
+    command from inside any repo never scatters dumps into it."""
+    cache = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", repo or "repo")
+    day = datetime.fromtimestamp(now, tz=timezone.utc).strftime("%Y-%m-%d")
+    return os.path.join(cache, "issue-reports", safe, day)
+
+
+def normalize(iss):
+    """Flatten the gh JSON shape into a stable internal dict."""
+    author = iss.get("author") or {}
+    author_login = author.get("login")
+    author_bot = bool(author.get("is_bot")) or is_bot_login(author_login)
+
+    labels = [l.get("name") for l in (iss.get("labels") or []) if l.get("name")]
+    assignees = [a.get("login") for a in (iss.get("assignees") or []) if a.get("login")]
+
+    comments = []
+    for c in iss.get("comments") or []:
+        ca = (c.get("author") or {}).get("login")
+        comments.append({
+            "login": ca,
+            "ts": parse_iso(c.get("createdAt")),
+            "is_bot": is_bot_login(ca),
+        })
+    comments = [c for c in comments if c["ts"] is not None]
+    comments.sort(key=lambda c: c["ts"])
+
+    created = parse_iso(iss.get("createdAt"))
+    closed = parse_iso(iss.get("closedAt"))
+    updated = parse_iso(iss.get("updatedAt"))
+    state = (iss.get("state") or "").upper()
+
+    return {
+        "number": iss.get("number"),
+        "title": iss.get("title") or "",
+        "url": iss.get("url") or "",
+        "state": state,
+        "state_reason": iss.get("stateReason") or "",
+        "created": created,
+        "closed": closed,
+        "updated": updated,
+        "labels": labels,
+        "author": author_login,
+        "author_bot": author_bot,
+        "assignees": assignees,
+        "comments": comments,
+        "is_open": state == "OPEN",
+    }
+
+# --------------------------------------------------------------------------- #
+# Metric helpers
+# --------------------------------------------------------------------------- #
+
+
+def pct(n, d):
+    return (100.0 * n / d) if d else 0.0
+
+
+def percentile(values, p):
+    if not values:
+        return None
+    s = sorted(values)
+    if len(s) == 1:
+        return s[0]
+    k = (len(s) - 1) * p
+    lo = int(k)
+    hi = min(lo + 1, len(s) - 1)
+    return s[lo] + (s[hi] - s[lo]) * (k - lo)
+
+
+def fmt_dur(seconds):
+    if seconds is None:
+        return "n/a"
+    seconds = int(round(seconds))
+    d, rem = divmod(seconds, 86400)
+    h, rem = divmod(rem, 3600)
+    m, _ = divmod(rem, 60)
+    if d:
+        return f"{d}d {h}h"
+    if h:
+        return f"{h}h {m}m"
+    return f"{m}m"
+
+
+def iso_week(ts):
+    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+    y, w, _ = dt.isocalendar()
+    return f"{y}-W{w:02d}"
+
+
+def cal_month(ts):
+    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+    return f"{dt.year}-{dt.month:02d}"
+
+
+def first_human_response(iss):
+    """First comment by a non-bot author other than the issue author."""
+    for c in iss["comments"]:
+        if c["is_bot"]:
+            continue
+        if c["login"] and c["login"] == iss["author"]:
+            continue
+        return c
+    return None
+
+# --------------------------------------------------------------------------- #
+# Report build
+# --------------------------------------------------------------------------- #
+
+
+def build_report(raw_issues, oldest, latest, trend_mode, repo, stale_days, now):
+    issues = [normalize(i) for i in raw_issues]
+    # Window filter on createdAt; issues with no createdAt are dropped.
+    win = [i for i in issues if i["created"] is not None and oldest <= i["created"] <= latest]
+
+    human = [i for i in win if not i["author_bot"]]
+    bots = [i for i in win if i["author_bot"]]
+    opened = [i for i in win if i["is_open"]]
+    closed = [i for i in win if not i["is_open"]]
+
+    # distribution by label
+    label_count = defaultdict(int)
+    label_closed = defaultdict(int)
+    for i in win:
+        for l in set(i["labels"]):
+            label_count[l] += 1
+            if not i["is_open"]:
+                label_closed[l] += 1
+    unlabeled = [i for i in win if not i["labels"]]
+    multi_label = [i for i in win if len(set(i["labels"])) > 1]
+
+    # distribution by author / assignee
+    author_count = defaultdict(int)
+    for i in human:
+        if i["author"]:
+            author_count[i["author"]] += 1
+    assignee_count = defaultdict(int)
+    for i in win:
+        for a in set(i["assignees"]):
+            assignee_count[a] += 1
+    unassigned = [i for i in win if not i["assignees"]]
+
+    # trend (by created and closed bucket)
+    bucket_fn = cal_month if trend_mode == "month" else iso_week
+    trend_created = defaultdict(int)
+    trend_closed = defaultdict(int)
+    for i in win:
+        trend_created[bucket_fn(i["created"])] += 1
+    for i in closed:
+        if i["closed"] is not None and oldest <= i["closed"] <= latest:
+            trend_closed[bucket_fn(i["closed"])] += 1
+
+    # responsiveness: TTFR + time-to-close, overall and per top label
+    top_labels = [l for l, _ in sorted(label_count.items(), key=lambda x: (-x[1], x[0]))[:TOP_N]]
+    ttfr = defaultdict(list)          # label -> [secs]; "__all__" overall
+    ttc = defaultdict(list)
+    no_response = 0
+    no_comments = 0
+
+    for i in win:
+        keys = ["__all__"] + [l for l in i["labels"] if l in top_labels]
+        first = first_human_response(i)
+        if not i["comments"]:
+            no_comments += 1
+        if first:
+            delta = first["ts"] - i["created"]
+            for k in keys:
+                ttfr[k].append(delta)
+        else:
+            no_response += 1
+        if not i["is_open"] and i["closed"] is not None:
+            ctime = i["closed"] - i["created"]
+            for k in keys:
+                ttc[k].append(ctime)
+
+    # stale open issues
+    stale_cutoff = now - stale_days * 86400
+    stale = sorted(
+        (i for i in opened if i["updated"] is not None and i["updated"] < stale_cutoff),
+        key=lambda i: i["updated"],
+    )
+
+    return _render(
+        repo, oldest, latest, trend_mode, now, stale_days,
+        win, human, bots, opened, closed,
+        label_count, label_closed, unlabeled, multi_label,
+        author_count, assignee_count, unassigned,
+        trend_created, trend_closed, top_labels,
+        ttfr, ttc, no_response, no_comments, stale,
+    )
+
+
+def _render(repo, oldest, latest, trend_mode, now, stale_days,
+            win, human, bots, opened, closed,
+            label_count, label_closed, unlabeled, multi_label,
+            author_count, assignee_count, unassigned,
+            trend_created, trend_closed, top_labels,
+            ttfr, ttc, no_response, no_comments, stale):
+    od = datetime.fromtimestamp(oldest, tz=timezone.utc).strftime("%Y-%m-%d")
+    ld = datetime.fromtimestamp(latest, tz=timezone.utc).strftime("%Y-%m-%d")
+    repo_label = repo or "(repo not supplied)"
+    L = []
+    a = L.append
+
+    a(f"# {repo_label} issue triage & responsiveness report")
+    a("")
+    a(f"- **Repository:** `{repo_label}`")
+    a(f"- **Window (UTC, by issue createdAt):** {od} -> {ld}  ({fmt_dur(latest - oldest)})")
+    a(f"- **Generated:** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+    a(f"- **Trend granularity:** {'calendar month' if trend_mode == 'month' else 'ISO week'}")
+    a("")
+
+    # ---- Volume -----------------------------------------------------------
+    a("## Volume")
+    a("")
+    a(f"- Issues created in window: **{len(win)}**")
+    a(f"- Opened by humans: **{len(human)}**  |  by bots: **{len(bots)}**")
+    a(f"- Still open: **{len(opened)}** ({pct(len(opened), len(win)):.0f}%)  |  "
+      f"Closed: **{len(closed)}** ({pct(len(closed), len(win)):.0f}%)")
+    if multi_label:
+        a(f"- Issues with >1 label: **{len(multi_label)}** "
+          "(counted toward each label below)")
+    a("")
+
+    # ---- Distribution by label -------------------------------------------
+    a("## Distribution by label")
+    a("")
+    if label_count:
+        a("| Label | Count | % of issues | Closed | Closed % |")
+        a("|---|--:|--:|--:|--:|")
+        for l, c in sorted(label_count.items(), key=lambda x: (-x[1], x[0]))[:TOP_N]:
+            cl = label_closed.get(l, 0)
+            a(f"| `{l}` | {c} | {pct(c, len(win)):.0f}% | {cl} | {pct(cl, c):.0f}% |")
+        if len(label_count) > TOP_N:
+            a(f"| _… {len(label_count) - TOP_N} more labels_ |  |  |  |  |")
+    else:
+        a("_No labels present on issues in window._")
+    a(f"\n- Unlabeled issues: **{len(unlabeled)} / {len(win)}** "
+      f"(**{pct(len(unlabeled), len(win)):.0f}% unlabeled**).")
+    a("")
+
+    # ---- Top reporters ----------------------------------------------------
+    a("## Top reporters (human authors)")
+    a("")
+    if author_count:
+        a("| Author | Issues |")
+        a("|---|--:|")
+        for u, c in sorted(author_count.items(), key=lambda x: (-x[1], x[0]))[:TOP_N]:
+            a(f"| `{u}` | {c} |")
+    else:
+        a("_No human-authored issues in window._")
+    a("")
+
+    # ---- Assignment -------------------------------------------------------
+    a("## Assignment")
+    a("")
+    a(f"- Unassigned issues: **{len(unassigned)} / {len(win)}** "
+      f"(**{pct(len(unassigned), len(win)):.0f}% unassigned**).")
+    a("")
+    if assignee_count:
+        a("| Assignee | Issues |")
+        a("|---|--:|")
+        for u, c in sorted(assignee_count.items(), key=lambda x: (-x[1], x[0]))[:TOP_N]:
+            a(f"| `{u}` | {c} |")
+        a("")
+
+    # ---- Trend ------------------------------------------------------------
+    a("## " + ("Monthly" if trend_mode == "month" else "Weekly") +
+      " trend (created vs closed)")
+    a("")
+    buckets = sorted(set(trend_created) | set(trend_closed))
+    if buckets:
+        a("| Period | Created | Closed | Net |")
+        a("|---|--:|--:|--:|")
+        for b in buckets:
+            cr = trend_created.get(b, 0)
+            cl = trend_closed.get(b, 0)
+            a(f"| {b} | {cr} | {cl} | {cr - cl:+d} |")
+    else:
+        a("_No issues in window._")
+    a("")
+
+    # ---- Responsiveness ---------------------------------------------------
+    a("## Responsiveness")
+    a("")
+    a("**Conventions.**")
+    a("")
+    a("- **TTFR** = time of the first comment authored by a non-bot user other "
+      "than the issue author, minus the issue's createdAt. Issues with no such "
+      "comment are counted as *no human response*.")
+    a("- **Time-to-close (TTC)** = closedAt - createdAt, for issues closed within "
+      "the window. Open issues are excluded from TTC.")
+    a("- Bot authors (e.g. `*[bot]`, `dependabot`, `github-actions`, `Copilot`) "
+      "are excluded from the TTFR responder set and from the human denominators.")
+    a("")
+
+    a("### Time to first human response (TTFR)")
+    a("")
+    a("| Scope | Median | p90 | n |")
+    a("|---|--:|--:|--:|")
+    allv = ttfr.get("__all__", [])
+    a(f"| **Overall** | **{fmt_dur(percentile(allv, 0.5))}** | "
+      f"**{fmt_dur(percentile(allv, 0.9))}** | {len(allv)} |")
+    for l in top_labels:
+        vals = ttfr.get(l, [])
+        if vals:
+            a(f"| `{l}` | {fmt_dur(percentile(vals, 0.5))} | "
+              f"{fmt_dur(percentile(vals, 0.9))} | {len(vals)} |")
+    a(f"\n- Issues with **no human response**: **{no_response} / {len(win)}** "
+      f"(**{pct(no_response, len(win)):.0f}%**).")
+    a(f"- Issues with **no comments at all**: **{no_comments} / {len(win)}** "
+      f"(**{pct(no_comments, len(win)):.0f}%**).")
+    a("")
+
+    a("### Time to close (TTC)")
+    a("")
+    a("| Scope | Median | p90 | n |")
+    a("|---|--:|--:|--:|")
+    allc = ttc.get("__all__", [])
+    a(f"| **Overall** | **{fmt_dur(percentile(allc, 0.5))}** | "
+      f"**{fmt_dur(percentile(allc, 0.9))}** | {len(allc)} |")
+    for l in top_labels:
+        vals = ttc.get(l, [])
+        if vals:
+            a(f"| `{l}` | {fmt_dur(percentile(vals, 0.5))} | "
+              f"{fmt_dur(percentile(vals, 0.9))} | {len(vals)} |")
+    a("")
+
+    # ---- Triage gaps ------------------------------------------------------
+    a("## Triage gaps")
+    a("")
+    a(f"- **Unlabeled:** {pct(len(unlabeled), len(win)):.0f}% "
+      f"({len(unlabeled)}/{len(win)})")
+    a(f"- **Unassigned:** {pct(len(unassigned), len(win)):.0f}% "
+      f"({len(unassigned)}/{len(win)})")
+    a(f"- **No human response:** {pct(no_response, len(win)):.0f}% "
+      f"({no_response}/{len(win)})")
+    a("- (Triage-health metrics: lower is better. Some issues are FYIs, automated, "
+      "or resolved inline and may legitimately need no label/assignee.)")
+    a("")
+
+    # ---- Stale open issues ------------------------------------------------
+    a(f"## Stale open issues (no update in {stale_days}+ days)")
+    a("")
+    if stale:
+        a(f"- **{len(stale)}** open issue(s) created in window have had no update "
+          f"in {stale_days}+ days.")
+        a("")
+        a("| # | Age since update | Title | Link |")
+        a("|---|--:|---|---|")
+        for i in stale[:TOP_N]:
+            age = fmt_dur(now - i["updated"])
+            title = re.sub(r"\s+", " ", i["title"])[:70].replace("|", "\\|")
+            link = f"[#{i['number']}]({i['url']})" if i["url"] else f"#{i['number']}"
+            a(f"| {i['number']} | {age} | {title} | {link} |")
+        if len(stale) > TOP_N:
+            a(f"| _… {len(stale) - TOP_N} more_ |  |  |  |")
+    else:
+        a(f"_No open issues older than {stale_days} days without an update._")
+    a("")
+
+    # ---- Caveats ----------------------------------------------------------
+    a("## Caveats")
+    a("")
+    a("- **Window is by createdAt:** issues created before the window but closed "
+      "inside it are not counted; closed-trend rows only include issues whose "
+      "closedAt also falls in the window.")
+    a("- **Comment completeness:** `gh issue list --json comments` returns the "
+      "fetched comment set; if the dump was truncated (e.g. `--limit` too low or "
+      "very long threads) TTFR/TTC samples are correspondingly partial.")
+    a("- **Bot detection is heuristic** (login pattern + `is_bot`); an unusual bot "
+      "login may be counted as human. Override via `--config`.")
+    a("- **Window-boundary issues** opened near the edges may still be receiving "
+      "their first response; their TTFR is a lower bound until re-fetched.")
+    a("- **TTC excludes still-open issues**, so a backlog of slow, unclosed issues "
+      "does not inflate the median.")
+    a("")
+
+    # ---- Recommendations --------------------------------------------------
+    a("## Recommendations")
+    a("")
+    a("- Drive **% unlabeled** and **% unassigned** down with a triage rotation; "
+      "track them as triage-health KPIs.")
+    a("- Set per-label **TTFR** targets and alert on p90 regressions; prioritise "
+      "labels with the largest no-response share.")
+    a("- Review the **stale open** list on each cadence; close, re-triage, or ping "
+      "owners.")
+    a("- Watch the **net (created - closed)** trend; sustained positive net means "
+      "the backlog is growing.")
+    a("")
+
+    # ---- How to regenerate ------------------------------------------------
+    a("### How to regenerate")
+    a("")
+    a(f"- **Repository:** `{repo_label}`")
+    a("- **Window:** default rolling 4 weeks; override with `--weeks N`, "
+      "`--month YYYY-MM`, or `--oldest/--latest` unix ts; `--month-to-month` for "
+      "a calendar-month trend.")
+    a("- **TTFR** = first non-bot comment (author != issue author) - createdAt. "
+      "**TTC** = closedAt - createdAt.")
+    a("- **Recipe (one command, fetch + render):** "
+      f"`issue-report --repo {repo_label} "
+      "--out <report.md>` (add window flags as needed). The script dumps issues "
+      "via `gh` into `~/.cache/issue-reports/<repo>/<date>/issues/` and renders. "
+      "To re-render that saved dump offline, add `--input-dir <dir> --no-fetch`.")
+    a("")
+    return "\n".join(L)
+
+# --------------------------------------------------------------------------- #
+# CLI
+# --------------------------------------------------------------------------- #
+
+
+def resolve_window(args):
+    now = float(args.now) if args.now else datetime.now(timezone.utc).timestamp()
+    if args.oldest and args.latest:
+        return float(args.oldest), float(args.latest), now
+    if args.month:
+        y, m = (int(x) for x in args.month.split("-"))
+        start = datetime(y, m, 1, tzinfo=timezone.utc)
+        end = datetime(y + (m == 12), (m % 12) + 1, 1, tzinfo=timezone.utc)
+        return start.timestamp(), end.timestamp(), now
+    weeks = args.weeks or 4
+    return now - weeks * 7 * 86400, now, now
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    p.add_argument("--input-dir",
+                   help="Dir with issues/*.json dumps. Required for --no-fetch; "
+                        "in fetch mode it's where the dump is written (default: "
+                        "~/.cache/issue-reports/<repo>/<date>).")
+    p.add_argument("--out", help="Output markdown path (default: stdout)")
+    p.add_argument("--repo", help="owner/name. Drives the fetch and report header.")
+    p.add_argument("--limit", type=int, default=DEFAULT_FETCH_LIMIT,
+                   help=f"Max issues to fetch in fetch mode (default {DEFAULT_FETCH_LIMIT})")
+    p.add_argument("--search", help="Extra `gh issue list --search` query (fetch mode)")
+    fetch_grp = p.add_mutually_exclusive_group()
+    fetch_grp.add_argument("--fetch", dest="fetch", action="store_true",
+                           default=None, help="Force fetching via gh (default when "
+                           "--repo is given and no dump is found)")
+    fetch_grp.add_argument("--no-fetch", dest="fetch", action="store_false",
+                           help="Never call gh; replay --input-dir only")
+    p.add_argument("--weeks", type=int, help="Rolling window length in weeks (default 4)")
+    p.add_argument("--month", help="Single calendar month YYYY-MM (UTC)")
+    p.add_argument("--oldest", help="Explicit window start (unix ts)")
+    p.add_argument("--latest", help="Explicit window end (unix ts)")
+    p.add_argument("--now", help="Override 'now' (unix ts) for rolling window / staleness")
+    p.add_argument("--month-to-month", action="store_true",
+                   help="Bucket the trend by calendar month instead of ISO week")
+    p.add_argument("--stale-days", type=int, default=DEFAULT_STALE_DAYS,
+                   help=f"Open+no-update threshold for 'stale' (default {DEFAULT_STALE_DAYS})")
+    p.add_argument("--config", help="JSON file overriding bot login pattern")
+    args = p.parse_args(argv)
+
+    global BOT_LOGIN_RE
+    if args.config:
+        with open(args.config, encoding="utf-8") as fh:
+            cfg = json.load(fh)
+        if cfg.get("bot_login_regex"):
+            BOT_LOGIN_RE = re.compile(cfg["bot_login_regex"])
+
+    oldest, latest, now = resolve_window(args)
+
+    # Decide fetch vs replay.
+    replay_dir = args.input_dir
+    existing = load_inputs(replay_dir) if replay_dir else []
+    if args.fetch is False:
+        if not replay_dir:
+            p.error("--no-fetch requires --input-dir")
+        raw = existing
+        if not raw:
+            print(f"WARNING: no issues parsed from {replay_dir}/issues/*.json",
+                  file=sys.stderr)
+    else:
+        do_fetch = args.fetch is True or not existing
+        if do_fetch:
+            if not args.repo:
+                p.error("fetching requires --repo (or pass --no-fetch with a "
+                        "populated --input-dir)")
+            dest = replay_dir or _default_data_dir(args.repo, now)
+            raw = fetch_issues(args.repo, args.limit, args.search, dest)
+        else:
+            raw = existing
+
+    trend_mode = "month" if args.month_to_month else "week"
+    report = build_report(raw, oldest, latest, trend_mode, args.repo,
+                          args.stale_days, now)
+
+    in_win = len([1 for i in (normalize(x) for x in raw)
+                  if i["created"] is not None and oldest <= i["created"] <= latest])
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as fh:
+            fh.write(report)
+        print(f"Wrote {args.out} ({in_win} issues in window)")
+    else:
+        print(report)
+
+
+if __name__ == "__main__":
+    main()
