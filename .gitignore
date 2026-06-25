@@ -5,3 +5,8 @@ vim/.vim/autoload/plug.vim
 # Profiling
 startup.log
 .DS_Store
+
+# issue-report: never commit fetched issue data or generated reports (may contain internal info)
+issue-report*.md
+issue-reports/data/
+.cache/issue-reports/
