@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "hooks": {
+    "notification": [
+      {
+        "command": "$HOME/.copilot/notify-permission.sh"
+      }
+    ]
+  }
+}
