@@ -49,6 +49,7 @@ import glob
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from collections import defaultdict
@@ -57,6 +58,13 @@ from datetime import datetime, timezone
 # --------------------------------------------------------------------------- #
 # Configuration (overridable via --config JSON)
 # --------------------------------------------------------------------------- #
+
+# Public, canonical home of this script (rendered into every report so readers
+# can find / audit the tool).
+SCRIPT_URL = (
+    "https://github.com/wallace/dotfiles/blob/main/"
+    "copilot-cli/.local/bin/issue-report"
+)
 
 # How many open days with no update before an issue is "stale".
 DEFAULT_STALE_DAYS = 30
@@ -280,7 +288,8 @@ def first_human_response(iss):
 # --------------------------------------------------------------------------- #
 
 
-def build_report(raw_issues, oldest, latest, trend_mode, repo, stale_days, now):
+def build_report(raw_issues, oldest, latest, trend_mode, repo, stale_days, now,
+                 gen_cmd=None):
     issues = [normalize(i) for i in raw_issues]
     # Window filter on createdAt; issues with no createdAt are dropped.
     win = [i for i in issues if i["created"] is not None and oldest <= i["created"] <= latest]
@@ -358,7 +367,7 @@ def build_report(raw_issues, oldest, latest, trend_mode, repo, stale_days, now):
         label_count, label_closed, unlabeled, multi_label,
         author_count, assignee_count, unassigned,
         trend_created, trend_closed, top_labels,
-        ttfr, ttc, no_response, no_comments, stale,
+        ttfr, ttc, no_response, no_comments, stale, gen_cmd,
     )
 
 
@@ -367,7 +376,7 @@ def _render(repo, oldest, latest, trend_mode, now, stale_days,
             label_count, label_closed, unlabeled, multi_label,
             author_count, assignee_count, unassigned,
             trend_created, trend_closed, top_labels,
-            ttfr, ttc, no_response, no_comments, stale):
+            ttfr, ttc, no_response, no_comments, stale, gen_cmd=None):
     od = datetime.fromtimestamp(oldest, tz=timezone.utc).strftime("%Y-%m-%d")
     ld = datetime.fromtimestamp(latest, tz=timezone.utc).strftime("%Y-%m-%d")
     repo_label = repo or "(repo not supplied)"
@@ -380,6 +389,7 @@ def _render(repo, oldest, latest, trend_mode, now, stale_days,
     a(f"- **Window (UTC, by issue createdAt):** {od} -> {ld}  ({fmt_dur(latest - oldest)})")
     a(f"- **Generated:** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     a(f"- **Trend granularity:** {'calendar month' if trend_mode == 'month' else 'ISO week'}")
+    a(f"- **Tool:** [`issue-report`]({SCRIPT_URL})")
     a("")
 
     # ---- Volume -----------------------------------------------------------
@@ -564,17 +574,25 @@ def _render(repo, oldest, latest, trend_mode, now, stale_days,
     # ---- How to regenerate ------------------------------------------------
     a("### How to regenerate")
     a("")
+    a(f"- **Tool:** [`issue-report`]({SCRIPT_URL}) "
+      "(deterministic; same repo state + window flags + `--now` => identical "
+      "output).")
+    if gen_cmd:
+        a("- **Exact command used for this report:**")
+        a("")
+        a("```bash")
+        a(gen_cmd)
+        a("```")
+        a("")
     a(f"- **Repository:** `{repo_label}`")
     a("- **Window:** default rolling 4 weeks; override with `--weeks N`, "
       "`--month YYYY-MM`, or `--oldest/--latest` unix ts; `--month-to-month` for "
       "a calendar-month trend.")
     a("- **TTFR** = first non-bot comment (author != issue author) - createdAt. "
       "**TTC** = closedAt - createdAt.")
-    a("- **Recipe (one command, fetch + render):** "
-      f"`issue-report --repo {repo_label} "
-      "--out <report.md>` (add window flags as needed). The script dumps issues "
-      "via `gh` into `~/.cache/issue-reports/<repo>/<date>/issues/` and renders. "
-      "To re-render that saved dump offline, add `--input-dir <dir> --no-fetch`.")
+    a("- The command fetches issues via `gh` into "
+      "`~/.cache/issue-reports/<repo>/<date>/issues/` and renders. To re-render "
+      "that saved dump offline, add `--input-dir <dir> --no-fetch`.")
     a("")
     return "\n".join(L)
 
@@ -658,8 +676,10 @@ def main(argv=None):
             raw = existing
 
     trend_mode = "month" if args.month_to_month else "week"
+    gen_cmd = " ".join(shlex.quote(a) for a in
+                       [os.path.basename(sys.argv[0])] + sys.argv[1:])
     report = build_report(raw, oldest, latest, trend_mode, args.repo,
-                          args.stale_days, now)
+                          args.stale_days, now, gen_cmd)
 
     in_win = len([1 for i in (normalize(x) for x in raw)
                   if i["created"] is not None and oldest <= i["created"] <= latest])
