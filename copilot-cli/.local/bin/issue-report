@@ -383,7 +383,7 @@ def _render(repo, oldest, latest, trend_mode, now, stale_days,
     L = []
     a = L.append
 
-    a(f"# {repo_label} issue triage & responsiveness report")
+    a(f"# {repo_label} issue triage & responsiveness report ({od} -> {ld})")
     a("")
     a(f"- **Repository:** `{repo_label}`")
     a(f"- **Window (UTC, by issue createdAt):** {od} -> {ld}  ({fmt_dur(latest - oldest)})")
