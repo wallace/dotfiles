@@ -8,7 +8,8 @@ model: qwen3:32b
 ollama_url: http://localhost:11434
 seed: 42          # fixed seed + temperature 0 => reproducible output on this host
 num_ctx: 32768    # long enough for ~1 hr transcripts; fits easily in 64 GB
-timeout: 900      # seconds
+max_ctx: 16384    # force chunking for long transcripts instead of one huge slow pass
+timeout: 1800     # seconds
 
 # Stage-1 noise removal. Conservative on purpose: only Whisper hallucinations and
 # bracketed sound cues. Real words (yeah/okay/bye) are kept. Each entry is a regex
