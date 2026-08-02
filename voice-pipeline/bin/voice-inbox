@@ -21,6 +21,10 @@ if [[ -z "${VAULT_INBOX:-}" && -f "$CONF" ]]; then
   set +a
 fi
 INBOX="${VAULT_INBOX:?Set VAULT_INBOX (zshrc export or ~/.config/voice-pipeline/env)}"
+# Reviewed transcripts live here after triage (moved by the Transcript Calendar's
+# "Mark reviewed" or by hand). Checked alongside the Inbox so a re-exported or
+# restored transcript for an already-reviewed recording is never reprocessed.
+REVIEWED="$INBOX/../Reviewed"
 
 DRY=0
 ARGS=(--clean-transcript)
@@ -43,6 +47,10 @@ if [[ -n "${UNTRANSCRIBED_DIR:-}" && -d "$UNTRANSCRIBED_DIR" ]]; then
       echo "skip ingest: $b (already in Inbox)"
       continue
     fi
+    if [[ -e "$REVIEWED/$b" || -e "$INBOX/../$b" ]]; then
+      echo "skip ingest: $b (already reviewed/archived)"
+      continue
+    fi
     if [[ $DRY -eq 1 ]]; then
       echo "would ingest: $b"
       continue
@@ -62,7 +70,7 @@ if [[ -n "${UNTRANSCRIBED_DIR:-}" && -d "$UNTRANSCRIBED_DIR" ]]; then
     while IFS= read -r -d '' a; do
       s="$(basename "$a")"
       s="${s%.*}"
-      if [[ -e "$INBOX/$s.md" || -e "$INBOX/../$s.md" ]]; then
+      if [[ -e "$INBOX/$s.md" || -e "$INBOX/../$s.md" || -e "$REVIEWED/$s.md" ]]; then
         if [[ -e "$VOICE_PIPELINE_AUDIO_ARCHIVE/$(basename "$a")" ]]; then
           rm "$a"
           echo "audio: removed duplicate $(basename "$a") (already archived)"
@@ -84,7 +92,7 @@ if [[ -n "${UNTRANSCRIBED_DIR:-}" && -d "$UNTRANSCRIBED_DIR" ]]; then
     s="$(basename "$a")"
     s="${s%.*}"
     if [[ ! -e "$UNTRANSCRIBED_DIR/$s.md" && ! -e "$INBOX/$s.md"
-          && ! -e "$INBOX/../$s.md" ]]; then
+          && ! -e "$INBOX/../$s.md" && ! -e "$REVIEWED/$s.md" ]]; then
       echo "WARN: '$s' has audio >30 min old but no transcript anywhere"
       stale=$((stale + 1))
     fi
@@ -123,6 +131,10 @@ for f in "$INBOX"/*.md; do
   [[ "$base" == "README" ]] && continue
   [[ "$base" == *" - Summary"* || "$base" == *" - Clean"* ]] && continue
   [[ -e "$INBOX/$base - Summary.md" ]] && continue
+  if [[ -e "$REVIEWED/$base - Summary.md" || -e "$INBOX/../$base - Summary.md" ]]; then
+    echo "skip: $base (already reviewed/archived; stray copy left in Inbox)"
+    continue
+  fi
   candidates+=("$f")
 done
 
