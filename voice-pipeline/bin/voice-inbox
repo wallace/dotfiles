@@ -10,6 +10,7 @@
 # Usage:
 #   voice-inbox                  # process everything unprocessed (two-pass)
 #   voice-inbox --dry-run        # just list what would be processed
+#   voice-inbox --since 260728   # only recordings on/after a date (YYMMDD or YYYY-MM-DD)
 #   voice-inbox --single-pass    # extra flags pass through to voice-transcript
 set -uo pipefail
 
@@ -27,13 +28,27 @@ INBOX="${VAULT_INBOX:?Set VAULT_INBOX (zshrc export or ~/.config/voice-pipeline/
 REVIEWED="$INBOX/../Reviewed"
 
 DRY=0
+SINCE=""
 ARGS=(--clean-transcript)
+expect_since=0
 for a in "$@"; do
+  if [[ $expect_since -eq 1 ]]; then
+    SINCE="$a"; expect_since=0; continue
+  fi
   case "$a" in
     --dry-run) DRY=1 ;;
+    --since)   expect_since=1 ;;
+    --since=*) SINCE="${a#--since=}" ;;
     *) ARGS+=("$a") ;;
   esac
 done
+# Normalize --since to YYMMDD: accept 260728 or 2026-07-28.
+if [[ -n "$SINCE" ]]; then
+  if [[ "$SINCE" =~ ^20([0-9]{2})-([0-9]{2})-([0-9]{2})$ ]]; then
+    SINCE="${BASH_REMATCH[1]}${BASH_REMATCH[2]}${BASH_REMATCH[3]}"
+  fi
+  [[ "$SINCE" =~ ^[0-9]{6}$ ]] || { echo "bad --since '$SINCE' (use YYMMDD or YYYY-MM-DD)"; exit 1; }
+fi
 
 # Ingest: MacWhisper's watch-folder export writes each transcript .md NEXT TO
 # the audio in untranscribed/ (the destination is not configurable), so sweep
@@ -133,6 +148,12 @@ for f in "$INBOX"/*.md; do
   [[ -e "$INBOX/$base - Summary.md" ]] && continue
   if [[ -e "$REVIEWED/$base - Summary.md" || -e "$INBOX/../$base - Summary.md" ]]; then
     echo "skip: $base (already reviewed/archived; stray copy left in Inbox)"
+    continue
+  fi
+  # --since: stems carry the recording date as YYMMDD_HHMM; anything without
+  # that prefix (odd names) is kept, on the theory that filters should never
+  # silently hide something they can't date.
+  if [[ -n "$SINCE" && "$base" =~ ^([0-9]{6})_ && "${BASH_REMATCH[1]}" -lt "$SINCE" ]]; then
     continue
   fi
   candidates+=("$f")
