@@ -248,7 +248,7 @@ def tags_in(text: str, people: dict):
     return found
 
 
-def build_frontmatter(stem, recorded, participants, topic, people):
+def build_frontmatter(stem, recorded, participants, topic, people, category=None):
     tags = [t for t in (tag_of(p, people) for p in participants) if t]
     fm = {
         'type': 'transcript-summary',
@@ -259,6 +259,11 @@ def build_frontmatter(stem, recorded, participants, topic, people):
         'topic': topic or '',
         'status': 'untriaged',
     }
+    # Work/personal default from the recording profile (speakers.yaml `category:`).
+    # Omitted when the profile gives no signal (e.g. generic) - the Transcript
+    # Calendar then shows its topic-keyword guess as unconfirmed until tagged.
+    if category:
+        fm['category'] = category
     dumped = yaml.safe_dump(fm, sort_keys=False, allow_unicode=True).strip()
     return f"---\n{dumped}\n---\n"
 
@@ -682,6 +687,7 @@ def summarize(cfg, transcript_text, roster_block):
     head = PROMPT.replace("{roster}", roster_block)
     head_toks = estimate_tokens(head)
     need = head_toks + estimate_tokens(transcript_text) + max_out + margin
+    print(f"[DEBUG] need={need} hard_ctx={hard_ctx}", file=sys.stderr)
 
     if need <= hard_ctx:
         ctx = max(cfg.get("num_ctx", 32768), need)
@@ -907,7 +913,8 @@ def main():
         # No summary available without the LLM: frontmatter + transcript only.
         if args.clean_transcript:
             fm = build_frontmatter(stem, recorded,
-                                   participants_from_turns(turns), "", tag_people)
+                                   participants_from_turns(turns), "", tag_people,
+                                   category=prof.get("category"))
             clean_path.write_text(fm + "\n## Transcript\n\n"
                                   + render_transcript(turns, tag_people, audio_ref)
                                   + "\n")
@@ -959,7 +966,7 @@ def main():
     participants = merge_participants(participants_from_turns(turns), data,
                                       people, strict=strict)
     fm = build_frontmatter(stem, recorded, participants, data.get("topic", ""),
-                           tag_people)
+                           tag_people, category=prof.get("category"))
 
     note = render_note(stem, fm, data, recorded, tag_people, recorder=recorder,
                        audio_ref=audio_ref)
