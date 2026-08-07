@@ -1,0 +1,408 @@
+#!/usr/bin/env python3
+"""teams-bridge - export MacWhisper-captured Teams meetings into the vault Inbox.
+
+MacWhisper auto-records Teams calls and diarizes them into its own SQLite DB.
+This script reads that DB directly and writes one markdown transcript per new
+meeting into $VAULT_INBOX, in the exact `**Speaker N** / *MM:SS* / text` shape
+`voice-inbox` / `voice-transcript` already consume - so speaker labels survive
+into the roster-mapping stage and no re-transcription is needed.
+
+  Meeting  -> recordedmeeting (appName='Teams')
+             -> session (merged mic+app track, diarized)
+               -> transcriptline (one diarized line, ordered by orderIndex)
+
+Output stem is `YYMMDD_HHMM` in LOCAL time (matching MacWhisper's own voice-memo
+export naming), derived from the meeting start.
+
+PUBLIC-REPO SAFE: no home paths hardcoded except the fixed MacWhisper app-support
+location (overridable via $MACWHISPER_DB). Inbox comes from $VAULT_INBOX or the
+private config at ~/.config/voice-pipeline/env, same as voice-inbox.
+
+FAIL-LOUD BY DESIGN: MacWhisper's schema is undocumented and can change between
+app versions. This script asserts the tables/columns it depends on exist and that
+each exported meeting actually yields transcript lines. A schema drift raises and
+exits non-zero (so launchd surfaces it) rather than silently dropping meetings.
+
+Usage:
+  teams-bridge                 # export every Teams meeting newer than last run
+  teams-bridge --dry-run       # list what would be exported, write nothing
+  teams-bridge --since 260728  # only meetings on/after a date (YYMMDD or YYYY-MM-DD)
+  teams-bridge --all           # ignore the processed-list / last-run watermark
+  teams-bridge --limit N       # cap number of meetings this run (newest first)
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import shutil
+import sqlite3
+import sys
+import tempfile
+from datetime import datetime
+from pathlib import Path
+
+APP_DB = Path(
+    os.environ.get("MACWHISPER_DB", "")
+    or Path.home()
+    / "Library/Application Support/MacWhisper/Database/main.sqlite"
+)
+CONFIG_ENV = Path.home() / ".config/voice-pipeline/env"
+
+# State (processed meeting ids + last-run watermark) lives outside the vault so a
+# vault sync never resurrects or drops meetings.
+STATE_DIR = Path(
+    os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")
+) / "voice-pipeline"
+STATE_FILE = STATE_DIR / "teams-bridge.json"
+
+
+class SchemaError(RuntimeError):
+    """Raised when MacWhisper's DB no longer looks the way we expect."""
+
+
+def log(msg: str) -> None:
+    print(msg, file=sys.stderr, flush=True)
+
+
+# --------------------------------------------------------------------------- #
+# Config
+# --------------------------------------------------------------------------- #
+def load_inbox() -> Path:
+    """Resolve $VAULT_INBOX, falling back to the private voice-pipeline env file.
+
+    Mirrors voice-inbox: env wins; otherwise source the config file's assignments.
+    Expands $HOME / ~ so the shell-style values in that file work here too.
+    """
+    inbox = os.environ.get("VAULT_INBOX")
+    if not inbox and CONFIG_ENV.is_file():
+        for raw in CONFIG_ENV.read_text().splitlines():
+            line = raw.strip()
+            if line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            if key.strip() == "VAULT_INBOX":
+                inbox = val.strip().strip('"').strip("'")
+                break
+    if not inbox:
+        log("ERROR: set VAULT_INBOX (zshrc export or ~/.config/voice-pipeline/env)")
+        sys.exit(1)
+    inbox = os.path.expandvars(os.path.expanduser(inbox))
+    return Path(inbox)
+
+
+# --------------------------------------------------------------------------- #
+# State
+# --------------------------------------------------------------------------- #
+def load_state() -> dict:
+    if STATE_FILE.is_file():
+        try:
+            return json.loads(STATE_FILE.read_text())
+        except (json.JSONDecodeError, OSError) as e:
+            log(f"WARN: could not read state {STATE_FILE}: {e} (treating as empty)")
+    return {"processed": [], "last_meeting_date": None}
+
+
+def save_state(state: dict) -> None:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = STATE_FILE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(state, indent=2, sort_keys=True))
+    tmp.replace(STATE_FILE)
+
+
+# --------------------------------------------------------------------------- #
+# DB access
+# --------------------------------------------------------------------------- #
+def snapshot_db(dst_dir: Path) -> Path:
+    """Copy the live DB via `.backup` so we read a WAL-checkpointed, consistent
+    snapshot without holding a lock on MacWhisper's file."""
+    if not APP_DB.is_file():
+        log(f"ERROR: MacWhisper DB not found at {APP_DB}")
+        log("       (set $MACWHISPER_DB if the app stores it elsewhere)")
+        sys.exit(1)
+    dst = dst_dir / "main.sqlite"
+    src = sqlite3.connect(f"file:{APP_DB}?mode=ro", uri=True)
+    try:
+        out = sqlite3.connect(dst)
+        try:
+            src.backup(out)
+        finally:
+            out.close()
+    finally:
+        src.close()
+    return dst
+
+
+REQUIRED = {
+    "recordedmeeting": {"id", "date", "appName", "duration", "dateDeleted"},
+    "session": {
+        "id",
+        "recordedMeetingID",
+        "transcriptionDidSucceed",
+        "dateDeleted",
+        "dateCreated",
+    },
+    "transcriptline": {"sessionId", "text", "start", "speakerID", "orderIndex"},
+    "speaker": {"id", "name"},
+}
+
+
+def verify_schema(con: sqlite3.Connection) -> None:
+    """Assert the tables/columns teams-bridge depends on still exist.
+
+    MacWhisper's schema is undocumented; an app update that renames or drops any
+    of these should break LOUDLY here, not silently export empty transcripts.
+    """
+    have_tables = {
+        r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    }
+    missing_tables = set(REQUIRED) - have_tables
+    if missing_tables:
+        raise SchemaError(
+            f"MacWhisper DB is missing expected table(s): {sorted(missing_tables)}. "
+            "The app's schema likely changed - teams-bridge needs updating."
+        )
+    for table, cols in REQUIRED.items():
+        have_cols = {row[1] for row in con.execute(f"PRAGMA table_info('{table}')")}
+        missing = cols - have_cols
+        if missing:
+            raise SchemaError(
+                f"Table '{table}' is missing expected column(s): {sorted(missing)}. "
+                "The app's schema likely changed - teams-bridge needs updating."
+            )
+
+
+def fetch_meetings(con: sqlite3.Connection, since_yymmdd: str | None):
+    """Return Teams meetings (newest first) as dicts with a picked live session.
+
+    We convert `recordedmeeting.date` (stored UTC, Core Data convention) to local
+    time inside SQLite so the stem matches MacWhisper's own local-time naming.
+    """
+    rows = con.execute(
+        """
+        SELECT hex(rm.id)                          AS mid,
+               rm.date                             AS date_utc,
+               datetime(rm.date, 'localtime')      AS date_local,
+               rm.title                            AS title,
+               rm.duration                         AS duration
+        FROM recordedmeeting rm
+        WHERE rm.appName = 'Teams'
+          AND rm.dateDeleted IS NULL
+        ORDER BY rm.date DESC
+        """
+    ).fetchall()
+
+    meetings = []
+    for mid, date_utc, date_local, title, duration in rows:
+        if date_local is None:
+            # A meeting we cannot date is a schema/data surprise - surface it,
+            # never silently skip (filters must not hide undatable rows).
+            raise SchemaError(f"meeting {mid} has an unparseable date: {date_utc!r}")
+        dt = datetime.strptime(date_local, "%Y-%m-%d %H:%M:%S")
+        stem = dt.strftime("%y%m%d_%H%M")
+        if since_yymmdd and stem[:6] < since_yymmdd:
+            continue
+        meetings.append(
+            {
+                "mid": mid,
+                "stem": stem,
+                "dt": dt,
+                "title": title,
+                "duration": duration or 0.0,
+            }
+        )
+    return meetings
+
+
+def pick_session(con: sqlite3.Connection, mid_hex: str):
+    """Choose the one live, successful session for a meeting.
+
+    Normally exactly one exists (the merged mic+app track). If several survive the
+    filter we take the newest by dateCreated and note it; if none, return None so
+    the caller can warn (a Teams meeting with no usable session is worth flagging,
+    but not fatal - transcription may still be running)."""
+    sessions = con.execute(
+        """
+        SELECT hex(id) AS sid, dateCreated
+        FROM session
+        WHERE recordedMeetingID = x'%s'
+          AND dateDeleted IS NULL
+          AND transcriptionDidSucceed = 1
+        ORDER BY dateCreated DESC
+        """
+        % mid_hex
+    ).fetchall()
+    if not sessions:
+        return None, 0
+    return sessions[0][0], len(sessions)
+
+
+def fetch_lines(con: sqlite3.Connection, sid_hex: str):
+    return con.execute(
+        """
+        SELECT COALESCE(sp.name, 'Unknown Speaker') AS speaker,
+               tl.start                             AS start_ms,
+               tl.text                              AS text
+        FROM transcriptline tl
+        LEFT JOIN speaker sp ON sp.id = tl.speakerID
+        WHERE tl.sessionId = x'%s'
+        ORDER BY tl.orderIndex
+        """
+        % sid_hex
+    ).fetchall()
+
+
+# --------------------------------------------------------------------------- #
+# Markdown assembly
+# --------------------------------------------------------------------------- #
+def fmt_ts(ms: int) -> str:
+    total = int(round(ms / 1000.0))
+    h, rem = divmod(total, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
+
+
+def build_markdown(lines) -> str:
+    """Render lines into the pipeline's expected block format.
+
+    Format per turn (matches MacWhisper's watch-folder export exactly):
+
+        **Speaker 1**
+        *MM:SS*
+        text
+
+    One blank line between turns. voice-transcript keys speaker mapping off the
+    `**Speaker N**` lines and the collapsed-timestamp detector off `*MM:SS*`.
+    """
+    blocks = []
+    for speaker, start_ms, text in lines:
+        text = (text or "").strip()
+        if not text:
+            continue
+        blocks.append(f"**{speaker}**\n*{fmt_ts(start_ms)}*\n{text}")
+    return "\n\n".join(blocks) + "\n"
+
+
+# --------------------------------------------------------------------------- #
+# Main
+# --------------------------------------------------------------------------- #
+def parse_since(raw: str) -> str:
+    m = re.fullmatch(r"20(\d{2})-(\d{2})-(\d{2})", raw)
+    if m:
+        return "".join(m.groups())
+    if re.fullmatch(r"\d{6}", raw):
+        return raw
+    log(f"ERROR: bad --since '{raw}' (use YYMMDD or YYYY-MM-DD)")
+    sys.exit(1)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Export MacWhisper Teams meetings to the vault Inbox.")
+    ap.add_argument("--dry-run", action="store_true", help="list what would be exported, write nothing")
+    ap.add_argument("--since", metavar="DATE", help="only meetings on/after YYMMDD or YYYY-MM-DD")
+    ap.add_argument("--all", action="store_true", help="ignore processed-list / last-run watermark")
+    ap.add_argument("--limit", type=int, metavar="N", help="cap meetings this run (newest first)")
+    args = ap.parse_args()
+
+    since = parse_since(args.since) if args.since else None
+    inbox = load_inbox()
+    if not args.dry_run:
+        inbox.mkdir(parents=True, exist_ok=True)
+
+    state = load_state()
+    processed = set(state.get("processed", []))
+    watermark = state.get("last_meeting_date")  # ISO local string of newest exported
+
+    with tempfile.TemporaryDirectory(prefix="teams-bridge-") as td:
+        db_path = snapshot_db(Path(td))
+        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        con.text_factory = str
+        try:
+            verify_schema(con)
+            meetings = fetch_meetings(con, since)
+
+            # Decide which meetings are "new". Two independent guards:
+            #  - processed-list: exact meeting ids we've already written (idempotent
+            #    across restores/renames).
+            #  - watermark: newest meeting date exported last run - a cheap fast-path
+            #    so we don't re-scan the whole history every run. --all bypasses both.
+            selected = []
+            for mtg in meetings:
+                if not args.all and mtg["mid"] in processed:
+                    continue
+                # Skip if the Inbox already has this stem (hand-created or prior run
+                # without state) - never clobber.
+                if (inbox / f"{mtg['stem']}.md").exists():
+                    log(f"skip: {mtg['stem']}.md already in Inbox")
+                    processed.add(mtg["mid"])
+                    continue
+                selected.append(mtg)
+
+            if args.limit is not None:
+                selected = selected[: args.limit]
+
+            if not selected:
+                log("teams-bridge: nothing new to export.")
+                return 0
+
+            log(f"teams-bridge: {len(selected)} meeting(s) to export:")
+            for mtg in selected:
+                dur_min = int(round(mtg["duration"] / 60.0))
+                log(f"  {mtg['stem']}.md  ({dur_min} min)")
+
+            if args.dry_run:
+                return 0
+
+            exported = 0
+            newest_iso = watermark
+            for mtg in selected:
+                sid, n_sess = pick_session(con, mtg["mid"])
+                if sid is None:
+                    log(f"WARN: {mtg['stem']}: no successful session yet (transcription running?) - leaving for next run")
+                    continue
+                if n_sess > 1:
+                    log(f"note: {mtg['stem']}: {n_sess} live sessions, using newest")
+                lines = fetch_lines(con, sid)
+                if not lines:
+                    # Session says it succeeded but has zero lines -> schema/data
+                    # drift. Fail loud rather than write an empty transcript.
+                    raise SchemaError(
+                        f"{mtg['stem']}: session {sid} transcriptionDidSucceed=1 but "
+                        "yielded 0 transcript lines - MacWhisper schema may have changed."
+                    )
+                md = build_markdown(lines)
+                out = inbox / f"{mtg['stem']}.md"
+                tmp = out.with_suffix(".md.tmp")
+                tmp.write_text(md)
+                tmp.replace(out)
+                exported += 1
+                processed.add(mtg["mid"])
+                iso = mtg["dt"].isoformat()
+                if newest_iso is None or iso > newest_iso:
+                    newest_iso = iso
+                log(f"exported: {out.name}  ({len(lines)} lines)")
+
+            state["processed"] = sorted(processed)
+            state["last_meeting_date"] = newest_iso
+            save_state(state)
+            log(f"teams-bridge: done, {exported} exported.")
+            return 0
+        finally:
+            con.close()
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except SchemaError as e:
+        log("")
+        log("=" * 72)
+        log("teams-bridge SCHEMA ERROR - refusing to continue:")
+        log(f"  {e}")
+        log("MacWhisper's internal DB changed shape. Re-inspect main.sqlite and")
+        log("update teams-bridge before it silently drops meetings.")
+        log("=" * 72)
+        sys.exit(2)

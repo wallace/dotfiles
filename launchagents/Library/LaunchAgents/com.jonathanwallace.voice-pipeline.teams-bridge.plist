@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.jonathanwallace.voice-pipeline.teams-bridge</string>
+
+    <!-- Export new MacWhisper-captured Teams meetings into the vault Inbox, then
+         process the Inbox (speaker mapping + summary + todos). The wrapper sources
+         ~/.config/voice-pipeline/env so VAULT_INBOX / roster / venv python resolve
+         under launchd's bare environment. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/jonathanwallace/bin/teams-bridge-run</string>
+    </array>
+
+    <!-- Every 15 min: responsive enough for a just-finished meeting, long enough
+         that the local-LLM voice-inbox pass from one run finishes before the next.
+         (StartInterval will not launch a second copy while one is still running.) -->
+    <key>StartInterval</key>
+    <integer>900</integer>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/jonathanwallace/Library/Logs/voice-pipeline.teams-bridge.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/jonathanwallace/Library/Logs/voice-pipeline.teams-bridge.err.log</string>
+</dict>
+</plist>
