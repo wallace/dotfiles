@@ -28,11 +28,16 @@ work first, then present decisions compactly in ONE message at the end.
 Compute today's date. If today's daily note doesn't exist, create it from the
 daily template (expanding Templater date expressions yourself).
 
-## Step 1 — Schedule from calendar
+## Step 1 — Schedule from calendar (two sources)
 
-Fetch today's events from the calendar MCP (`list_events`, primary calendar,
-today 00:00 → 23:59 local; load via ToolSearch if deferred). Write a schedule
-under `## 🗂️ Overview` as a `### 📅 Schedule` subsection:
+1. **Personal**: calendar MCP (`list_events`, primary Google calendar, today
+   00:00 → 23:59 local; load via ToolSearch if deferred).
+2. **Work (GitHub M365)**: run the bundled script — it reads the published
+   Outlook ICS URL from `~/.config/prep-day/env` (never print that URL):
+   `python3 <skill-dir>/scripts/work-calendar-today.py [YYYY-MM-DD]`
+
+Merge both, sorted by time, and write a schedule under `## 🗂️ Overview` as a
+`### 📅 Schedule` subsection:
 
 ```
 - 09:00–09:30 Standup
