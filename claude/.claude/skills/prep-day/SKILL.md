@@ -32,12 +32,15 @@ daily template (expanding Templater date expressions yourself).
 
 1. **Personal**: calendar MCP (`list_events`, primary Google calendar, today
    00:00 → 23:59 local; load via ToolSearch if deferred).
-2. **Work (GitHub M365)**: run the bundled script — it reads the published
-   Outlook ICS URL from `~/.config/prep-day/env` (never print that URL):
+2. **Work (GitHub M365) + team OOO**: run the bundled script — it reads every
+   `*_ICS_URL` from `~/.config/prep-day/env` (never print those URLs) and
+   prints `feed<TAB>time<TAB>summary` lines:
    `python3 <skill-dir>/scripts/work-calendar-today.py [YYYY-MM-DD]`
 
-Merge both, sorted by time, and write a schedule under `## 🗂️ Overview` as a
-`### 📅 Schedule` subsection:
+Merge personal + work events sorted by time, and write a schedule under
+`## 🗂️ Overview` as a `### 📅 Schedule` subsection. `team-ooo` entries are
+not schedule lines — render them as one `- 🏝️ OOO: <names>` line at the top
+of the schedule, and skip 1:1/meeting prep for anyone who is out:
 
 ```
 - 09:00–09:30 Standup
