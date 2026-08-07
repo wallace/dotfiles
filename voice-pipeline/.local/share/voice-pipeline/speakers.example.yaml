@@ -1,8 +1,48 @@
 # TEMPLATE — safe to commit. Copy to your vault as speakers.yaml. Real file is
 # git-ignored. Maps MacWhisper "Speaker N" tags -> display names (see people.yaml).
+#
+# meetings/files: map diarization tags -> display names.
+#   meetings: regex against the filename stem; files: exact-stem overrides (win).
 meetings:
   - match: ".*"          # fallback: assume nothing
     speakers: {}
 files:
   "YYMMDD_HHMM":         # one exact filename stem
     Speaker 2: Alice
+
+# profiles: recording contexts, selected per file by (in order):
+#   1. --profile flag   2. profile `match` regex vs stem
+#   3. pass-0 LLM classification using `description`   4. default_profile
+# Profile keys:
+#   cast: candidate speakers for pass-1 forced choice ([] = none -> pass 1 skipped)
+#   pass1: run forced-choice speaker ID (needs a non-empty cast)
+#   tags: mint #handle tags (default true; personal recordings -> false)
+#   attribute_all_to: recorder -> all unlabelled turns become the recorder (solo)
+#   strict_participants: limit frontmatter additions to people.yaml names
+#                        (default: true when cast is set, false otherwise)
+#   category: default frontmatter `category:` value (work/personal) -- a hint.
+default_profile: generic
+
+profiles:
+  teams:
+    # Microsoft Teams meetings captured by MacWhisper and exported by the
+    # teams-bridge script (bin/teams-bridge -> Inbox). Always work calls. Stems
+    # (YYMMDD_HHMM) look like any other recording, so selection relies on this
+    # description via the pass-0 classifier, not a filename `match`.
+    description: Microsoft Teams work meeting or call with colleagues - multiple remote participants discussing engineering, product, planning, or project work
+    cast: [Alice, Bob]           # your usual attendees; pass 2 fills in the rest
+    pass1: true
+    strict_participants: false   # Teams calls often include people outside the cast
+    category: work
+
+  solo:
+    description: A single person recording a memo to self, dictating notes or ideas with no other speakers
+    cast: []
+    pass1: false
+    attribute_all_to: recorder
+    category: work
+
+  generic:
+    description: Anything else - unknown meeting, mixed or unclear context
+    cast: []
+    pass1: true        # no cast, so pass 1 is skipped; pass 2 infers names from text
