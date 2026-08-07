@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Print one day's events from the work ICS feed.
+"""Print one day's events from the work ICS feeds.
 
 Usage: work-calendar-today.py [YYYY-MM-DD]   (default: today)
 
-Reads WORK_ICS_URL from ~/.config/prep-day/env, fetches the published
-Outlook calendar, and expands recurrences well enough for a daily agenda:
-plain events, WEEKLY/DAILY rules with INTERVAL/BYDAY/UNTIL/COUNT, simple
-MONTHLY/YEARLY, EXDATE, cancelled events, and RECURRENCE-ID overrides.
-Output: one line per event, "HH:MM–HH:MM\tSummary\tLocation", sorted.
-Stdlib only — no pip dependencies.
+Reads every *_ICS_URL entry from ~/.config/prep-day/env (e.g. WORK_ICS_URL,
+TEAM_OOO_ICS_URL), fetches each published Outlook calendar, and expands
+recurrences well enough for a daily agenda: plain events, WEEKLY/DAILY rules
+with INTERVAL/BYDAY/UNTIL/COUNT, simple MONTHLY/YEARLY, EXDATE, cancelled
+events, and RECURRENCE-ID overrides.
+Output: one line per event, "feed\tHH:MM–HH:MM\tSummary\tLocation", sorted
+by feed then time; the feed label derives from the env key (WORK_ICS_URL →
+"work", TEAM_OOO_ICS_URL → "team-ooo"). Stdlib only — no pip dependencies.
 """
 import os
 import re
@@ -35,16 +37,21 @@ LOCAL = ZoneInfo("America/New_York")
 DAYCODES = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
 
 
-def load_url():
+def load_urls():
     path = os.path.expanduser("~/.config/prep-day/env")
+    feeds = {}
     try:
         with open(path) as f:
             for line in f:
-                if line.startswith("WORK_ICS_URL="):
-                    return line.split("=", 1)[1].strip()
+                key, _, value = line.strip().partition("=")
+                if key.endswith("_ICS_URL") and value:
+                    name = key[: -len("_ICS_URL")].lower().replace("_", "-")
+                    feeds[name] = value
     except FileNotFoundError:
         pass
-    sys.exit("WORK_ICS_URL missing from ~/.config/prep-day/env")
+    if not feeds:
+        sys.exit("no *_ICS_URL entries in ~/.config/prep-day/env")
+    return feeds
 
 
 def unfold(text):
@@ -89,6 +96,8 @@ def parse_events(lines):
                     ev["start_date"] = datetime.strptime(value, "%Y%m%d").date()
             elif name == "DTEND":
                 ev["end"] = parse_dt(value, params)
+                if ev["end"] is None:  # all-day end, exclusive per RFC 5545
+                    ev["end_date"] = datetime.strptime(value, "%Y%m%d").date()
             elif name == "SUMMARY":
                 ev["summary"] = value.replace("\\,", ",").replace("\\;", ";")
             elif name == "LOCATION":
@@ -113,7 +122,11 @@ def parse_events(lines):
 def occurs_on(ev, target):
     """Does this recurring/plain master event occur on `target` (local date)?"""
     if ev.get("allday"):
-        return ev.get("start_date") == target
+        start = ev.get("start_date")
+        if start is None:
+            return False
+        end = ev.get("end_date") or (start + timedelta(days=1))
+        return start <= target < end
     start = ev.get("start")
     if start is None:
         return False
@@ -167,12 +180,7 @@ def occurs_on(ev, target):
     return False  # unsupported freq — better to miss than crash
 
 
-def main():
-    target = date.fromisoformat(sys.argv[1]) if len(sys.argv) > 1 else datetime.now(LOCAL).date()
-    with urllib.request.urlopen(load_url(), timeout=30) as r:
-        text = r.read().decode("utf-8", errors="replace")
-    events = parse_events(unfold(text))
-
+def day_events(events, target):
     overridden = {(e.get("uid"), e.get("recurrence_id")) for e in events if e.get("recurrence_id")}
     todays = []
     for ev in events:
@@ -193,19 +201,31 @@ def main():
             return (0, "")
         return (1, ev["start"].astimezone(LOCAL).strftime("%H:%M"))
 
-    for ev in sorted(todays, key=key):
-        if ev.get("allday"):
-            line = f"all-day\t{ev['summary']}"
-        else:
-            s = ev["start"].astimezone(LOCAL)
-            dur = (ev["end"] - ev["start"]) if ev.get("end") else timedelta(0)
-            # recurring occurrence: same clock time on target date
-            s = s.replace(year=target.year, month=target.month, day=target.day)
-            e = s + dur
-            line = f"{s.strftime('%H:%M')}–{e.strftime('%H:%M')}\t{ev['summary']}"
-        if ev.get("location"):
-            line += f"\t{ev['location']}"
-        print(line)
+    return sorted(todays, key=key)
+
+
+def main():
+    target = date.fromisoformat(sys.argv[1]) if len(sys.argv) > 1 else datetime.now(LOCAL).date()
+    for feed, url in load_urls().items():
+        try:
+            with urllib.request.urlopen(url, timeout=30) as r:
+                text = r.read().decode("utf-8", errors="replace")
+        except OSError as e:
+            print(f"{feed}\tERROR\tfetch failed: {e}", file=sys.stderr)
+            continue
+        for ev in day_events(parse_events(unfold(text)), target):
+            if ev.get("allday"):
+                line = f"{feed}\tall-day\t{ev['summary']}"
+            else:
+                s = ev["start"].astimezone(LOCAL)
+                dur = (ev["end"] - ev["start"]) if ev.get("end") else timedelta(0)
+                # recurring occurrence: same clock time on target date
+                s = s.replace(year=target.year, month=target.month, day=target.day)
+                e = s + dur
+                line = f"{feed}\t{s.strftime('%H:%M')}–{e.strftime('%H:%M')}\t{ev['summary']}"
+            if ev.get("location"):
+                line += f"\t{ev['location']}"
+            print(line)
 
 
 if __name__ == "__main__":
