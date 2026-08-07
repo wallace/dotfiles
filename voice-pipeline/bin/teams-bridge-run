@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# teams-bridge-run - the scheduled entry point (called by launchd).
+#
+# launchd runs with a bare environment, so this wrapper does what an interactive
+# shell would: source the private config (VAULT_INBOX, TRANSCRIPT_ROSTER_DIR,
+# VOICE_PIPELINE_* ...) and put ~/bin on PATH, then run the export + processing
+# chain the user chose: export new Teams meetings, then process the Inbox.
+#
+# teams-bridge failing (e.g. a MacWhisper schema change -> exit 2) must NOT block
+# voice-inbox from processing whatever is already in the Inbox, but the failure
+# must still surface. So we run them independently and exit non-zero if either
+# failed - launchd logs stderr to the .err.log for that.
+set -uo pipefail
+
+CONF="$HOME/.config/voice-pipeline/env"
+if [[ -f "$CONF" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$CONF"
+  set +a
+fi
+
+export PATH="$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+
+echo "=== teams-bridge-run $(date '+%Y-%m-%d %H:%M:%S %Z') ==="
+
+rc=0
+
+# 1) Export any new Teams meetings from MacWhisper's DB into the Inbox.
+if ! teams-bridge; then
+  echo "teams-bridge exited non-zero (schema drift? see above) - continuing to voice-inbox"
+  rc=1
+fi
+
+# 2) Process the Inbox (enrich transcripts: speaker mapping, summary, todos).
+if ! voice-inbox; then
+  echo "voice-inbox exited non-zero"
+  rc=1
+fi
+
+echo "=== teams-bridge-run done (rc=$rc) ==="
+exit "$rc"
