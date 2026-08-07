@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# prep-day — run the PCARD morning prep from the CLI.
+#
+#   prep-day          headless: all mechanical steps run unattended; pending
+#                     decisions are written into today's daily note as
+#                     checkboxes to handle in Obsidian
+#   prep-day --chat   interactive: keep/bump/drop decisions happen in chat
+set -euo pipefail
+
+VAULT="$HOME/Documents/first-obsidian"
+cd "$VAULT"
+
+if [[ "${1:-}" == "--chat" ]]; then
+  exec claude "prep my day"
+fi
+
+# prompt must precede --allowedTools (variadic flag swallows trailing args)
+exec claude -p \
+  "Run the prep-day skill in autonomous mode: ask no questions, apply all \
+mechanical steps, and write pending decisions into today's daily note as \
+described in the skill's autonomous-mode section. Finish with a short \
+summary of what changed." \
+  --permission-mode acceptEdits \
+  --allowedTools "Read,Write,Edit,Glob,Grep,Bash"

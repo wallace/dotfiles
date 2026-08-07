@@ -120,6 +120,22 @@ End with one compact message:
 - Close with a 3-line summary: tasks kept/dropped, transcripts filed and
   remaining in inbox, first meeting time.
 
+## Autonomous mode (headless — `prep-day` CLI launcher)
+
+When the invoking prompt says "autonomous mode" (or you cannot ask
+questions), skip the Step 5/6 dialogue entirely:
+
+- Sweep and roll tasks as usual — the section header already invites
+  keep/bump/drop by hand in Obsidian. Prefix tasks at 3+ rollovers with ‼️.
+- Write transcript candidates under `### 📥 Transcript candidates (promote
+  into New Tasks or delete)` as unchecked tasks with source links, then file
+  the processed summaries to Reviewed as usual (wikilinks keep working).
+- Never cancel/drop anything on your own initiative.
+- If the calendar MCP is unavailable (common headless), rely on the ICS
+  script alone and note the gap in the schedule.
+- End with a concise stdout summary: tasks rolled (+escalations), candidates
+  written, transcripts filed/remaining, first meeting.
+
 ## Guardrails
 
 - Batch file edits; don't narrate every one.
