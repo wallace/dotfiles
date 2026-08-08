@@ -45,15 +45,25 @@ def find_trio(root: Path, stem: str):
 
 
 def load_people(path: Path):
-    """name -> tag (best effort)."""
+    """(name -> tag, alias -> canonical name). Aliases: name, github, tag."""
+    tags, aliases = {}, {}
     if not path.exists():
-        return {}
+        return tags, aliases
     text = path.read_text()
     if yaml:
         data = yaml.safe_load(text) or {}
-        return {name: (info or {}).get("tag")
-                for name, info in (data.get("people") or {}).items()}
-    return dict(re.findall(r"^\s{2}(\w[\w .-]*?):\s*\{.*?tag:\s*([\w-]+)", text, re.M))
+        entries = {name: (info or {}) for name, info in (data.get("people") or {}).items()}
+    else:
+        entries = {m.group(1): {"github": m.group(2), "tag": m.group(3)}
+                   for m in re.finditer(
+                       r"^\s{2}(\w[\w .-]*?):\s*\{\s*github:\s*([\w-]+),\s*tag:\s*([\w-]+)",
+                       text, re.M)}
+    for name, info in entries.items():
+        tags[name] = info.get("tag")
+        for alias in (name, info.get("github"), info.get("tag")):
+            if alias:
+                aliases.setdefault(alias.lower(), name)
+    return tags, aliases
 
 
 def _secs(ts: str) -> int:
@@ -164,6 +174,28 @@ def prompt_mappings(samples, guesses, audio):
     return mappings
 
 
+def maybe_add_person(path: Path, name: str, dry_run: bool):
+    """Offer to add an unknown speaker to people.yaml. Returns their tag or None."""
+    if not sys.stdin.isatty() or not path.exists():
+        return None
+    github = input(
+        f"  '{name}' is new — GitHub handle to add to people.yaml [Enter=don't add]: "
+    ).strip()
+    if not github:
+        return None
+    tag = input(f"  Obsidian tag for #-references [{github}]: ").strip() or github
+    text = path.read_text()
+    line = f"  {name}: {{github: {github}, tag: {tag}}}\n"
+    if re.search(r"^people:", text, re.M):
+        text = re.sub(r"^people:\n", f"people:\n{line}", text, count=1, flags=re.M)
+    else:
+        text = text.rstrip("\n") + f"\npeople:\n{line}"
+    if not dry_run:
+        path.write_text(text)
+    print(f"  added: {line.strip()}")
+    return tag
+
+
 def update_speakers_yaml(path: Path, stem: str, mappings, dry_run):
     """Insert/merge a files: entry without disturbing comments elsewhere."""
     text = path.read_text()
@@ -239,10 +271,18 @@ def main():
     if not mappings:
         sys.exit("nothing to do")
 
-    people = load_people(args.people)
-    for name in mappings.values():
-        if name not in people:
-            print(f"note: '{name}' not in people.yaml — applied without a #tag")
+    people, aliases = load_people(args.people)
+    for n, name in mappings.items():
+        canonical = aliases.get(name.lower())
+        if canonical and canonical != name:
+            print(f"'{name}' -> {canonical} (people.yaml)")
+            mappings[n] = canonical
+        elif not canonical:
+            tag = maybe_add_person(args.people, name, args.dry_run)
+            if tag:
+                people[name] = tag
+            else:
+                print(f"note: '{name}' not in people.yaml — applied without a #tag")
 
     entry = update_speakers_yaml(args.speakers, args.stem, mappings, args.dry_run)
     print(f"speakers.yaml files entry:\n{entry.rstrip()}")
