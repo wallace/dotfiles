@@ -2,6 +2,8 @@
 """Assign real names to diarized speakers in a processed transcript trio.
 
 Usage:
+  transcript_speakers.py [opts]                      # list transcripts with
+                                                     #   unconfirmed speakers
   transcript_speakers.py [opts] STEM                 # interactive
   transcript_speakers.py [opts] STEM 1=Anthony 2=Ray # direct mapping
   transcript_speakers.py [opts] STEM --list          # show speakers + guesses
@@ -245,9 +247,39 @@ def add_frontmatter_items(text: str, key: str, values):
     return text[:fm.end()].replace(fm.group(1), body) + text[fm.end():], added
 
 
+def pending_report(root: Path, audio_dir):
+    rows = []
+    for sub in ("Inbox", "Reviewed"):
+        d = root / sub
+        if not d.is_dir():
+            continue
+        for p in sorted(d.glob("*.md")):
+            if p.name == "README.md" or p.name.endswith((" - Clean.md", " - Summary.md")):
+                continue
+            text = p.read_text(errors="replace")
+            samples = raw_speakers(text)
+            if not samples:
+                continue
+            summary = d / f"{p.stem} - Summary.md"
+            guesses = (summary_guesses(summary.read_text(), text, samples)
+                       if summary.exists() else {})
+            rows.append((sub, p.stem, len(samples), len(guesses),
+                         bool(find_audio(audio_dir, p.stem))))
+    if not rows:
+        print("no transcripts with unconfirmed speakers 🎉")
+        return
+    rows.sort(key=lambda r: (r[0] != "Inbox", r[1]), reverse=False)
+    for sub, stem, n, g, has_audio in rows:
+        print(f"{sub + '/' + stem:<42} {n:>2} unnamed  {g:>2} guessed  "
+              f"{'audio ✓' if has_audio else 'no audio'}")
+    print(f"\n{len(rows)} transcripts pending — "
+          f"run: transcript-speakers <stem>")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("stem")
+    ap.add_argument("stem", nargs="?", default=None,
+                    help="transcript stem; omit to list all pending transcripts")
     ap.add_argument("mappings", nargs="*", help="N=Name pairs; omit for interactive")
     ap.add_argument("--speakers", type=Path, required=True)
     ap.add_argument("--people", type=Path, required=True)
@@ -257,6 +289,10 @@ def main():
     ap.add_argument("--list", action="store_true", help="show speakers and exit")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
+
+    if args.stem is None:
+        pending_report(args.transcripts_dir, args.audio_dir)
+        return
 
     trio = find_trio(args.transcripts_dir, args.stem)
     raw_text = trio[""].read_text()
