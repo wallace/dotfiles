@@ -21,4 +21,5 @@ exec "$PYTHON" "$CODE_DIR/transcript_speakers.py" \
   --speakers "$ROSTER_DIR/speakers.yaml" \
   --people   "$ROSTER_DIR/people.yaml" \
   --transcripts-dir "$(dirname "$INBOX")" \
+  ${VOICE_PIPELINE_AUDIO_ARCHIVE:+--audio-dir "$VOICE_PIPELINE_AUDIO_ARCHIVE"} \
   "$@"
