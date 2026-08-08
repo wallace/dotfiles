@@ -20,6 +20,7 @@ from the archived audio (ffmpeg + afplay; repeat to cycle utterances).
 """
 import argparse
 import re
+import select
 import shutil
 import subprocess
 import sys
@@ -104,10 +105,18 @@ def play_snippet(audio: Path, start: int, duration: int = 10):
         if extract.returncode != 0:
             print(f"  (couldn't extract audio: {extract.stderr.strip()[:120]})")
             return
+        proc = subprocess.Popen(["afplay", tmp.name])
+        print("  (Enter stops playback)")
         try:
-            subprocess.run(["afplay", tmp.name])
+            while proc.poll() is None:
+                ready, _, _ = select.select([sys.stdin], [], [], 0.2)
+                if ready:
+                    sys.stdin.readline()  # consume the Enter
+                    proc.terminate()
+                    break
         except KeyboardInterrupt:
-            pass  # Ctrl-C stops playback, not the program
+            proc.terminate()  # Ctrl-C also stops playback, not the program
+        proc.wait()
 
 
 def summary_guesses(summary_text: str, raw_text: str, samples):
