@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Installed via GNU stow: launcher at ~/bin/transcript-speakers (symlink),
+# code at ~/.local/share/voice-pipeline/ (also stowed).
+#
+# Assign real names to "Speaker N" labels in a processed transcript trio:
+#   transcript-speakers 260806_1416                  # interactive
+#   transcript-speakers 260806_1416 1=Anthony 2=Ray  # direct
+#   transcript-speakers 260806_1416 --list           # inspect only
+#
+# Env vars (set via ~/.config/voice-pipeline/env, sourced by ~/.zshrc):
+#   TRANSCRIPT_ROSTER_DIR  (required) vault folder with people/speakers.yaml
+#   VAULT_INBOX            (required) vault Transcripts/Inbox folder
+#   VOICE_PIPELINE_PYTHON  (optional) absolute interpreter (the venv python)
+#   VOICE_PIPELINE_DIR     (optional) code location if non-default
+set -euo pipefail
+PYTHON="${VOICE_PIPELINE_PYTHON:-python3}"
+CODE_DIR="${VOICE_PIPELINE_DIR:-$HOME/.local/share/voice-pipeline}"
+ROSTER_DIR="${TRANSCRIPT_ROSTER_DIR:?Set TRANSCRIPT_ROSTER_DIR to the vault transcript-pipeline folder}"
+INBOX="${VAULT_INBOX:?Set VAULT_INBOX to the vault Transcripts/Inbox folder}"
+exec "$PYTHON" "$CODE_DIR/transcript_speakers.py" \
+  --speakers "$ROSTER_DIR/speakers.yaml" \
+  --people   "$ROSTER_DIR/people.yaml" \
+  --transcripts-dir "$(dirname "$INBOX")" \
+  "$@"
