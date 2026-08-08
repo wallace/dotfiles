@@ -15,11 +15,15 @@ Summary) in Transcripts/Reviewed/ or Inbox/, then:
 
 Interactive mode shows each speaker's first utterances plus the Summary's
 "Unlabelled-speaker guesses" as defaults. Enter accepts the default, a name
-assigns it, "-" skips the speaker.
+assigns it, "-" skips the speaker, and "p" plays that speaker's utterance
+from the archived audio (ffmpeg + afplay; repeat to cycle utterances).
 """
 import argparse
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 try:
@@ -52,12 +56,48 @@ def load_people(path: Path):
     return dict(re.findall(r"^\s{2}(\w[\w .-]*?):\s*\{.*?tag:\s*([\w-]+)", text, re.M))
 
 
+def _secs(ts: str) -> int:
+    parts = [int(p) for p in ts.split(":")]
+    out = 0
+    for p in parts:
+        out = out * 60 + p
+    return out
+
+
 def raw_speakers(raw_text: str):
-    """speaker number -> first few utterances."""
+    """speaker number -> list of (start_seconds, utterance)."""
     samples = {}
-    for m in re.finditer(r"\*\*Speaker (\d+)\*\*\n\*[\d:]+\*\n(.+)", raw_text):
-        samples.setdefault(int(m.group(1)), []).append(m.group(2).strip())
+    for m in re.finditer(r"\*\*Speaker (\d+)\*\*\n\*([\d:]+)\*\n(.+)", raw_text):
+        samples.setdefault(int(m.group(1)), []).append(
+            (_secs(m.group(2)), m.group(3).strip()))
     return samples
+
+
+def find_audio(audio_dir, stem):
+    if not audio_dir:
+        return None
+    for ext in (".m4a", ".mp3", ".wav"):
+        if (p := audio_dir / f"{stem}{ext}").exists():
+            return p
+    return None
+
+
+def play_snippet(audio: Path, start: int, duration: int = 10):
+    if not (shutil.which("ffmpeg") and shutil.which("afplay")):
+        print("  (ffmpeg + afplay required for playback)")
+        return
+    with tempfile.NamedTemporaryFile(suffix=".wav") as tmp:
+        extract = subprocess.run(
+            ["ffmpeg", "-loglevel", "error", "-ss", str(max(0, start - 1)),
+             "-t", str(duration), "-i", str(audio), "-y", tmp.name],
+            capture_output=True, text=True)
+        if extract.returncode != 0:
+            print(f"  (couldn't extract audio: {extract.stderr.strip()[:120]})")
+            return
+        try:
+            subprocess.run(["afplay", tmp.name])
+        except KeyboardInterrupt:
+            pass  # Ctrl-C stops playback, not the program
 
 
 def summary_guesses(summary_text: str, raw_text: str, samples):
@@ -74,7 +114,7 @@ def summary_guesses(summary_text: str, raw_text: str, samples):
             continue
         needle = clue[:40]
         for n, lines in samples.items():
-            if any(needle in line for line in lines):
+            if any(needle in text for _, text in lines):
                 rank = {"high": 3, "medium": 2, "low": 1}.get(confidence, 0)
                 if rank > guesses.get(n, (None, -1))[1]:
                     guesses[n] = (name, rank)
@@ -96,14 +136,27 @@ def parse_cli_mappings(args, known_speakers):
     return mappings
 
 
-def prompt_mappings(samples, guesses):
+def prompt_mappings(samples, guesses, audio):
     mappings = {}
-    print("Assign names (Enter = accept guess, '-' = skip):\n")
+    hints = "Enter = accept guess, '-' = skip" + (", 'p' = play audio" if audio else "")
+    print(f"Assign names ({hints}):\n")
     for n in sorted(samples):
-        for line in samples[n][:2]:
-            print(f"    Speaker {n}: {line[:110]}")
+        for secs, text in samples[n][:2]:
+            print(f"    Speaker {n} [{secs // 60:02d}:{secs % 60:02d}]: {text[:110]}")
         default = guesses.get(n)
-        answer = input(f"  Speaker {n} = [{default or 'skip'}]: ").strip()
+        cursor = 0  # cycles through this speaker's utterances on repeated 'p'
+        while True:
+            answer = input(f"  Speaker {n} = [{default or 'skip'}]: ").strip()
+            if answer.lower() == "p":
+                if not audio:
+                    print("  (no archived audio for this transcript)")
+                    continue
+                secs, text = samples[n][cursor % len(samples[n])]
+                cursor += 1
+                print(f"  ▶ {secs // 60:02d}:{secs % 60:02d} \"{text[:80]}\"")
+                play_snippet(audio, secs)
+                continue
+            break
         print()
         if answer == "-" or (not answer and not default):
             continue
@@ -158,6 +211,8 @@ def main():
     ap.add_argument("--speakers", type=Path, required=True)
     ap.add_argument("--people", type=Path, required=True)
     ap.add_argument("--transcripts-dir", type=Path, required=True)
+    ap.add_argument("--audio-dir", type=Path, default=None,
+                    help="archived audio folder; enables 'p' playback in interactive mode")
     ap.add_argument("--list", action="store_true", help="show speakers and exit")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
@@ -174,12 +229,13 @@ def main():
         for n in sorted(samples):
             g = f"  (guess: {guesses[n]})" if n in guesses else ""
             print(f"Speaker {n}{g}")
-            for line in samples[n][:2]:
-                print(f"    {line[:110]}")
+            for secs, text in samples[n][:2]:
+                print(f"    [{secs // 60:02d}:{secs % 60:02d}] {text[:110]}")
         return
 
+    audio = find_audio(args.audio_dir, args.stem)
     mappings = (parse_cli_mappings(args.mappings, samples) if args.mappings
-                else prompt_mappings(samples, guesses))
+                else prompt_mappings(samples, guesses, audio))
     if not mappings:
         sys.exit("nothing to do")
 
