@@ -708,7 +708,7 @@ KP_TS_RE = re.compile(r'^\s*\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?\s*[-:]?\s*')
 
 
 def render_note(stem, frontmatter, data, recorded, people, recorder=None,
-                transcript_text=None, audio_ref=None):
+                transcript_text=None, audio_ref=None, audio_path=None):
     """
     Render the enriched note. Action items are partitioned by the triage model:
       - "My action items": the recorder's explicit commitments -> checkboxes,
@@ -726,6 +726,11 @@ def render_note(stem, frontmatter, data, recorded, people, recorder=None,
     L = [frontmatter, ""]
     if audio_ref:
         L.append(f"![[{audio_ref[0]}/{audio_ref[1]}]]")
+        # file:// links: the filename opens the audio in the default app; the
+        # folder link opens Finder at the archive (no URL can select the file).
+        if audio_path:
+            L.append(f"🔊 [{audio_ref[1]}]({audio_path.as_uri()}) · "
+                     f"[open in Finder]({audio_path.parent.as_uri()})")
         L.append("")
     summary = data.get("summary", "").strip()
     L.append("> [!summary] Summary")
@@ -906,6 +911,8 @@ def main():
     # Archived source audio -> clickable seek timestamps (Media Extended).
     audio_fname = find_audio(stem, args.audio_dir)
     audio_ref = (args.audio_prefix, audio_fname) if audio_fname else None
+    audio_path = ((Path(args.audio_dir) / audio_fname).resolve()
+                  if audio_fname else None)
     if audio_ref:
         print(f"[audio] linking timestamps to {args.audio_prefix}/{audio_fname}")
 
@@ -969,7 +976,7 @@ def main():
                            tag_people, category=prof.get("category"))
 
     note = render_note(stem, fm, data, recorded, tag_people, recorder=recorder,
-                       audio_ref=audio_ref)
+                       audio_ref=audio_ref, audio_path=audio_path)
     out_path = src.with_name(f"{stem} - Summary{args.suffix}.md")
     out_path.write_text(note + "\n")
     print(f"[write] {out_path}")
@@ -978,7 +985,7 @@ def main():
         display_text = render_transcript(turns, tag_people, audio_ref)
         clean_note = render_note(stem, fm, data, recorded, tag_people,
                                  recorder=recorder, transcript_text=display_text,
-                                 audio_ref=audio_ref)
+                                 audio_ref=audio_ref, audio_path=audio_path)
         clean_path.write_text(clean_note + "\n")
         print(f"[write] {clean_path}")
 
