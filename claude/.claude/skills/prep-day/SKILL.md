@@ -28,6 +28,16 @@ work first, then present decisions compactly in ONE message at the end.
 Compute today's date. If today's daily note doesn't exist, create it from the
 daily template (expanding Templater date expressions yourself).
 
+**Clobber check:** if today's note exists but contains unexpanded Templater
+syntax (`<% tp.`) or lacks the capture-rule header, a device with a stale
+template overwrote it via sync (this happened 2026-08-12). Alert Jonathan,
+then rebuild rather than trusting it. Recovery sources: rolled tasks =
+`[>] … → [[<today>]]` marks in prior daily notes; transcript candidates =
+action-item sections of the Summaries in `Transcripts/Reviewed/`; schedule =
+the calendar feeds. If direct file access fails with "Operation not
+permitted" (macOS revoked Documents access), fall back to the obsidian-mcp
+tools, and tell Jonathan to re-grant Full Disk Access.
+
 ## Step 1 — Schedule from calendar (two sources)
 
 1. **Personal**: calendar MCP (`list_events`, primary Google calendar, today
