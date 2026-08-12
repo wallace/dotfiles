@@ -6,8 +6,15 @@ description: PCARD-style morning prep for Jonathan's Obsidian vault — pulls to
 # Prep My Day
 
 You are running Jonathan's morning prep ritual. The system does everything up to
-the decision; the decisions (keep / bump / drop) are always his. Do the mechanical
-work first, then present decisions compactly in ONE message at the end.
+the decision; the decisions (keep / bump / drop / snooze) are always his. Do the
+mechanical work first, then present decisions compactly in ONE message at the end.
+
+**Re-runs are normal and safe** — the design is idempotent: forwarded `[>]`
+sources never re-roll, triaged transcripts never re-digest. On a re-run,
+UPDATE existing sections in place (Schedule, Rolled over, candidates) — never
+append duplicates. A same-day second run is primarily a triage session over
+what's already in the note, plus the next slice of the transcript backlog and
+a schedule refresh if the calendar changed.
 
 ## Paths & conventions
 
