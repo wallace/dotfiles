@@ -69,26 +69,32 @@ def log(msg: str) -> None:
 # --------------------------------------------------------------------------- #
 # Config
 # --------------------------------------------------------------------------- #
-def load_inbox() -> Path:
-    """Resolve $VAULT_INBOX, falling back to the private voice-pipeline env file.
+def load_env_value(key: str) -> str | None:
+    """Resolve a config key: process env wins, else the private env file.
 
-    Mirrors voice-inbox: env wins; otherwise source the config file's assignments.
     Expands $HOME / ~ so the shell-style values in that file work here too.
     """
-    inbox = os.environ.get("VAULT_INBOX")
-    if not inbox and CONFIG_ENV.is_file():
+    val = os.environ.get(key)
+    if not val and CONFIG_ENV.is_file():
         for raw in CONFIG_ENV.read_text().splitlines():
             line = raw.strip()
             if line.startswith("#") or "=" not in line:
                 continue
-            key, _, val = line.partition("=")
-            if key.strip() == "VAULT_INBOX":
-                inbox = val.strip().strip('"').strip("'")
+            k, _, v = line.partition("=")
+            if k.strip() == key:
+                val = v.strip().strip('"').strip("'")
                 break
+    if not val:
+        return None
+    return os.path.expandvars(os.path.expanduser(val))
+
+
+def load_inbox() -> Path:
+    """Resolve $VAULT_INBOX (mirrors voice-inbox)."""
+    inbox = load_env_value("VAULT_INBOX")
     if not inbox:
         log("ERROR: set VAULT_INBOX (zshrc export or ~/.config/voice-pipeline/env)")
         sys.exit(1)
-    inbox = os.path.expandvars(os.path.expanduser(inbox))
     return Path(inbox)
 
 
@@ -238,6 +244,74 @@ def pick_session(con: sqlite3.Connection, mid_hex: str):
     return sessions[0][0], len(sessions)
 
 
+# --------------------------------------------------------------------------- #
+# Audio export (mic + app tracks -> Transcripts/Audio/<stem>.m4a)
+# --------------------------------------------------------------------------- #
+# Audio is an enhancement: a missing mediafile table, absent ffmpeg, or a
+# missing track must WARN and skip, never block transcript export.
+MEDIA_TYPES = ("meetingMicAudio", "meetingAppAudio")
+
+
+def has_media_schema(con: sqlite3.Connection) -> bool:
+    try:
+        cols = {row[1] for row in con.execute("PRAGMA table_info('mediafile')")}
+    except sqlite3.Error:
+        return False
+    return {"filename", "type", "recordedMeetingID"} <= cols
+
+
+def fetch_media(con: sqlite3.Connection, mid_hex: str) -> dict[str, str]:
+    """type -> filename for a meeting's audio tracks."""
+    rows = con.execute(
+        """
+        SELECT type, filename FROM mediafile
+        WHERE recordedMeetingID = x'%s' AND type IN (?, ?)
+        """
+        % mid_hex,
+        MEDIA_TYPES,
+    ).fetchall()
+    return {t: f for t, f in rows}
+
+
+def export_audio(stem: str, media: dict[str, str], media_dir: Path,
+                 audio_dir: Path, dry_run: bool) -> str:
+    """Write <stem>.m4a into the archive. Returns a status string for logging."""
+    dest = audio_dir / f"{stem}.m4a"
+    if dest.exists():
+        return "exists"
+    paths = [media_dir / media[t] for t in MEDIA_TYPES if t in media]
+    paths = [p for p in paths if p.is_file()]
+    if not paths:
+        return "no-media"
+    if dry_run:
+        return f"would export ({len(paths)} track(s))"
+    tmp = dest.with_suffix(".m4a.tmp")
+    try:
+        if len(paths) == 2 and shutil.which("ffmpeg"):
+            import subprocess
+            r = subprocess.run(
+                ["ffmpeg", "-loglevel", "error", "-y",
+                 "-i", str(paths[0]), "-i", str(paths[1]),
+                 "-filter_complex", "amix=inputs=2:duration=longest",
+                 "-c:a", "aac", "-b:a", "96k", "-f", "mp4", str(tmp)],
+                capture_output=True, text=True)
+            if r.returncode != 0:
+                tmp.unlink(missing_ok=True)
+                return f"ffmpeg failed: {r.stderr.strip()[:100]}"
+        else:
+            # single track, or no ffmpeg: copy the app track (most voices) or
+            # whatever exists
+            src = paths[-1]
+            shutil.copy2(src, tmp)
+            if len(paths) == 2:
+                log(f"WARN: {stem}: ffmpeg not found - copied app track only")
+        tmp.replace(dest)
+        return "exported"
+    except OSError as e:
+        tmp.unlink(missing_ok=True)
+        return f"error: {e}"
+
+
 def fetch_lines(con: sqlite3.Connection, sid_hex: str):
     return con.execute(
         """
@@ -344,15 +418,42 @@ def main() -> int:
             if args.limit is not None:
                 selected = selected[: args.limit]
 
+            if selected:
+                log(f"teams-bridge: {len(selected)} meeting(s) to export:")
+                for mtg in selected:
+                    dur_min = int(round(mtg["duration"] / 60.0))
+                    log(f"  {mtg['stem']}.md  ({dur_min} min)")
+            else:
+                log("teams-bridge: no new transcripts to export.")
+
+            # Audio pass: every live meeting in the DB, idempotent (skips stems
+            # already archived). Independent of the transcript watermark so the
+            # first run after this feature lands backfills the archive.
+            audio_dir_raw = load_env_value("VOICE_PIPELINE_AUDIO_ARCHIVE")
+            if not audio_dir_raw:
+                log("note: VOICE_PIPELINE_AUDIO_ARCHIVE unset - skipping audio export")
+            elif not has_media_schema(con):
+                log("WARN: mediafile table missing/changed - skipping audio export")
+            else:
+                audio_dir = Path(audio_dir_raw)
+                media_dir = APP_DB.parent / "ExternalMedia"
+                if not args.dry_run:
+                    audio_dir.mkdir(parents=True, exist_ok=True)
+                n_audio = 0
+                for mtg in meetings:
+                    media = fetch_media(con, mtg["mid"])
+                    status = export_audio(
+                        mtg["stem"], media, media_dir, audio_dir, args.dry_run)
+                    if status == "exists":
+                        continue
+                    log(f"audio {mtg['stem']}: {status}")
+                    if status == "exported":
+                        n_audio += 1
+                if n_audio:
+                    log(f"teams-bridge: {n_audio} audio file(s) archived.")
+
             if not selected:
-                log("teams-bridge: nothing new to export.")
                 return 0
-
-            log(f"teams-bridge: {len(selected)} meeting(s) to export:")
-            for mtg in selected:
-                dur_min = int(round(mtg["duration"] / 60.0))
-                log(f"  {mtg['stem']}.md  ({dur_min} min)")
-
             if args.dry_run:
                 return 0
 
