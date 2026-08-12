@@ -67,6 +67,12 @@ Scan daily notes from the last 21 days (excluding today) for open `- [ ]` tasks,
 including nested ones. Ignore: tasks under `## 🧍 Personal check-in`, template
 boilerplate, and anything already forwarded `[>]`.
 
+**Snoozed tasks stay put:** skip any task whose `📅` due date is in the
+future — it was deliberately rescheduled, not orphaned. Leave it in its
+source note untouched (no roll, no new arrow); the daily note's "Due Today"
+query resurfaces it on the right day, and if it goes overdue it re-enters
+the sweep like any open task.
+
 For each open task found:
 1. Append it under `### 🔁 Rolled over` in today's To-Do List section (create
    the subsection after `### 🆕 New Tasks` if missing), preserving text, tags,
@@ -125,6 +131,9 @@ End with one compact message:
 
 - **keep** → leave in today's Rolled over / promote candidate to New Tasks.
 - **bump** → leave in place; it will re-roll tomorrow and earn another arrow.
+- **snooze <date>** → set/replace `📅 YYYY-MM-DD` on the task (accept fuzzy
+  forms: "friday", "+1w", "next month"). Remove its ‼️ (it's scheduled, not
+  aging); keep existing arrows as history. It stops rolling until due.
 - **drop** → change to `- [-]` (cancelled) in today's note. Never hard-delete.
 - File all processed transcript trios to Reviewed as described in Step 3.
 - Close with a 3-line summary: tasks kept/dropped, transcripts filed and
