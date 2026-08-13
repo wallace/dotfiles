@@ -35,6 +35,12 @@ a schedule refresh if the calendar changed.
 Compute today's date. If today's daily note doesn't exist, create it from the
 daily template (expanding Templater date expressions yourself).
 
+**Navigation links** (maintain every run): the line under the H1 must read
+`**◀ Previous:** [[<prev>]] · **Next ▶:** —` where `<prev>` is the most recent
+existing daily note before today — create the line if missing. Then open that
+previous note and set its `**Next ▶:**` to `[[<today>]]` (replacing the `—`).
+Previous notes with a missing nav line get one too.
+
 **Clobber check:** if today's note exists but contains unexpanded Templater
 syntax (`<% tp.`) or lacks the capture-rule header, a device with a stale
 template overwrote it via sync (this happened 2026-08-12). Alert Jonathan,
@@ -47,8 +53,11 @@ tools, and tell Jonathan to re-grant Full Disk Access.
 
 ## Step 1 — Schedule from calendar (two sources)
 
-1. **Personal**: calendar MCP (`list_events`, primary Google calendar, today
-   00:00 → 23:59 local; load via ToolSearch if deferred).
+1. **Personal**: if the script output (below) includes a `personal` feed
+   (PERSONAL_ICS_URL in the env file — Google Calendar's secret iCal address),
+   use that. Otherwise fall back to the calendar MCP (`list_events`, primary
+   Google calendar, today 00:00 → 23:59 local; load via ToolSearch if
+   deferred) — it's only available in interactive sessions.
 2. **Work (GitHub M365) + team OOO**: run the bundled script — it reads every
    `*_ICS_URL` from `~/.config/prep-day/env` (never print those URLs) and
    prints `feed<TAB>time<TAB>summary` lines:
@@ -79,6 +88,22 @@ future — it was deliberately rescheduled, not orphaned. Leave it in its
 source note untouched (no roll, no new arrow); the daily note's "Due Today"
 query resurfaces it on the right day, and if it goes overdue it re-enters
 the sweep like any open task.
+
+**But keep them visible:** every day's note must contain, between the Rolled
+over and Transcript candidates sections, this standing window (add it if
+missing — it's a live query, zero maintenance):
+
+```
+### 💤 Snoozed (due later — resurfaces automatically on the due day)
+​```tasks
+not done
+due after today
+path includes 02-Daily-Notes
+path does not include templates
+sort by due
+hide task count
+​```
+```
 
 For each open task found:
 1. Append it under `### 🔁 Rolled over` in today's To-Do List section (create
