@@ -17,12 +17,11 @@
 #   1. Outside active hrs → nobody wants 3am chimes
 #   2. Microphone in use  → you are on a call (Zoom/Teams/Meet all trip this)
 #
-# Being *muted* is deliberately not treated as being in a meeting — a muted call
-# is one you can be interrupted during. Whether that has any effect is up to the
-# app. Zoom (verified in a real call) keeps the mic RUNNING while muted, so a
-# Zoom call suppresses the chime start to finish; its mute discards samples
-# rather than closing the device. Teams and Meet are untested — check with
-# `mic-in-use --list` while muted.
+# Muting is deliberately not treated as leaving a meeting, but in practice that
+# distinction never fires: Zoom, Teams and Meet were all tested in real calls and
+# all keep the mic RUNNING while muted (they discard samples rather than closing
+# the device). So the effective behaviour is that any call suppresses the chime
+# start to finish. See README.md for what per-app mute detection would cost.
 #
 # There is deliberately no Do Not Disturb rule. The only headless-readable Focus
 # source (~/Library/DoNotDisturb/DB/Assertions.json) is an append-only ledger
