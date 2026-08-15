@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.jonathanwallace.chime.announce-hour</string>
+
+    <!-- Speak the time on the hour unless a meeting is in progress. The script
+         itself owns every suppression rule (mic in use, DND, active hours), so
+         launchd's only job is to fire at :00. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/jonathanwallace/bin/announce-hour</string>
+    </array>
+
+    <!-- Minute 0 with no Hour key = every hour, on the hour. Deliberately not
+         StartInterval 3600, which drifts off the hour from whenever it loaded. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- No RunAtLoad: loading the agent (or logging in) should not trigger an
+         off-schedule announcement. Note launchd fires a missed StartCalendarInterval
+         once on wake if the Mac was asleep at :00 — brief, and it still runs the
+         meeting checks, so it stays quiet when it matters. -->
+
+    <key>StandardOutPath</key>
+    <string>/Users/jonathanwallace/Library/Logs/chime.announce-hour.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/jonathanwallace/Library/Logs/chime.announce-hour.err.log</string>
+</dict>
+</plist>
