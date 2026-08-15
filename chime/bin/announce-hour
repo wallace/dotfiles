@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+#
+# announce-hour
+#
+# Speaks the current time, but stays quiet while a meeting is in progress.
+# Driven by a LaunchAgent that fires at :00 every hour (see
+# com.jonathanwallace.chime.announce-hour.plist).
+#
+# This replaces the built-in macOS "Announce the time" (System Settings →
+# Menu Bar → Clock options), which has no notion of meetings and will happily
+# talk over a Zoom call. Turn the built-in off before enabling this:
+#
+#   defaults write com.apple.speech.synthesis.general.prefs \
+#     TimeAnnouncementPrefs -dict-add TimeAnnouncementsEnabled -bool false
+#
+# Suppression rules, in order:
+#   1. Outside active hrs → nobody wants 3am chimes
+#   2. Microphone in use  → you are on a call (Zoom/Teams/Meet all trip this)
+#
+# Being *muted* in a meeting is deliberately not suppressed — a muted call is
+# one you can be interrupted during. Whether muting actually restores the chime
+# depends on the app: it does if the app releases the input stream while muted,
+# and does not if the app keeps capturing and drops the samples itself. Verify
+# with `mic-in-use --list` while muted in a real call.
+#
+# There is deliberately no Do Not Disturb rule. The only headless-readable Focus
+# source (~/Library/DoNotDisturb/DB/Assertions.json) is an append-only ledger
+# that retains assertions from ended Focus sessions with no reliable liveness
+# marker, so keying off it silences the chime permanently. Use active hours.
+#
+# Config lives in ~/.config/chime/env (see chime/README.md). Every knob has a
+# working default, so the file is optional.
+
+set -euo pipefail
+
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+# Machine-local overrides (START_HOUR, END_HOUR, VOICE, ...) so the plist stays
+# free of env vars — same pattern as the voice-pipeline agents.
+if [[ -f "$HOME/.config/chime/env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$HOME/.config/chime/env"
+  set +a
+fi
+
+START_HOUR="${CHIME_START_HOUR:-8}"     # first hour that may chime (24h, inclusive)
+END_HOUR="${CHIME_END_HOUR:-21}"        # last hour that may chime  (24h, inclusive)
+VOICE="${CHIME_VOICE:-}"                # empty = system voice (Samantha here)
+RATE="${CHIME_RATE:-}"                  # empty = voice default
+
+LOG="${CHIME_LOG:-$HOME/Library/Logs/chime.log}"
+MIC_PROBE="${CHIME_MIC_PROBE:-$HOME/bin/mic-in-use}"
+
+mkdir -p "$(dirname "$LOG")"
+ts() { date "+%Y-%m-%d %H:%M:%S"; }
+skip() { echo "[$(ts)] skip: $1" >> "$LOG"; exit 0; }
+
+hour=$(date +%-H)   # %-H: no leading zero, so 08 doesn't parse as invalid octal
+
+# --- 1. active hours ---------------------------------------------------------
+if (( hour < START_HOUR || hour > END_HOUR )); then
+  skip "outside active hours (${START_HOUR}-${END_HOUR}, now ${hour})"
+fi
+
+# --- 2. microphone in use ----------------------------------------------------
+# The primary meeting signal. Covers Zoom, Teams, Google Meet in any browser,
+# and anything else that opens the mic — no per-app process matching needed,
+# which matters because Teams and Zoom both idle in the background all day.
+if [[ -x "$MIC_PROBE" ]]; then
+  if "$MIC_PROBE"; then
+    skip "microphone in use (in a meeting)"
+  fi
+else
+  echo "[$(ts)] warn: mic probe missing at $MIC_PROBE — cannot detect meetings" >> "$LOG"
+fi
+
+# --- announce ----------------------------------------------------------------
+# The agent only fires at :00, so phrase it as the built-in does on the hour:
+# "It's ten o'clock". Minutes are still spoken if this is run by hand off-hour
+# ("It's ten seventeen"), which is what manual testing wants.
+minute=$(date +%-M)
+if (( minute == 0 )); then
+  phrase="It's $(date '+%-I') o'clock"
+else
+  phrase="It's $(date '+%-I:%M')"
+fi
+
+say_args=()
+[[ -n "$VOICE" ]] && say_args+=(-v "$VOICE")
+[[ -n "$RATE" ]]  && say_args+=(-r "$RATE")
+
+/usr/bin/say "${say_args[@]}" "$phrase"
+echo "[$(ts)] announced: $phrase" >> "$LOG"

@@ -1,0 +1,17 @@
+# A custom .stow-local-ignore REPLACES stow's built-in default ignore list, so we
+# must re-list the defaults we still want alongside our own additions — otherwise
+# stow would start symlinking README.md into $HOME. Same reasoning as the
+# voice-pipeline package.
+
+# --- our additions ---
+# The Swift source is build input; only the compiled mic-in-use belongs in ~/bin.
+^/bin/mic-in-use\.swift$
+
+# --- stow's usual defaults, restated ---
+^/README.*
+^/LICENSE.*
+^/COPYING
+\.gitignore$
+\.git$
+\.gitmodules$
+\.DS_Store$
