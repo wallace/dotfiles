@@ -40,11 +40,23 @@ implement mute by discarding captured samples rather than closing the input
 device, so there is nothing at the device level to distinguish muted from
 unmuted. The `say` still gets suppressed while you sit muted on a call.
 
-That is a limitation of the device-level signal, not a bug. Making mute actually
-un-suppress the chime would mean reading per-app mute state (Zoom's AppleScript
-dictionary, Teams' logs, a browser extension for Meet) — three app-specific and
-fragile integrations replacing one CoreAudio property read. Not worth it unless
-the all-call suppression turns out to be genuinely annoying.
+This cannot be fixed app-independently. macOS ships no system-wide microphone
+mute, so a meeting app's mute button is purely internal state — the app holds the
+device open and drops the samples. Nothing at the OS layer changes when you mute,
+so there is no property, assertion or indicator for any probe to read. The
+device-level signal this uses is already the most app-independent one available.
+
+(The one real system-level control, `input volume of (get volume settings)`, is a
+different thing: it silences the hardware while the meeting app still shows you
+as live and talking. It reports whether *you* muted the input, never whether you
+are muted in the call.)
+
+The only ways to distinguish muted are app-specific — Zoom's AppleScript
+dictionary, Teams' logs, a browser extension for Meet — i.e. three fragile
+integrations that break on app updates, replacing one CoreAudio property read. If
+the all-call suppression becomes annoying, a manual "chime anyway" override
+(Hammerspoon hotkey writing a flag this script checks) is far more robust than
+trying to infer mute state.
 
 To check a new app:
 
