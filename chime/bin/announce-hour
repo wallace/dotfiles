@@ -17,11 +17,12 @@
 #   1. Outside active hrs → nobody wants 3am chimes
 #   2. Microphone in use  → you are on a call (Zoom/Teams/Meet all trip this)
 #
-# Being *muted* in a meeting is deliberately not suppressed — a muted call is
-# one you can be interrupted during. Whether muting actually restores the chime
-# depends on the app: it does if the app releases the input stream while muted,
-# and does not if the app keeps capturing and drops the samples itself. Verify
-# with `mic-in-use --list` while muted in a real call.
+# Being *muted* is deliberately not treated as being in a meeting — a muted call
+# is one you can be interrupted during. Whether that has any effect is up to the
+# app. Zoom (verified in a real call) keeps the mic RUNNING while muted, so a
+# Zoom call suppresses the chime start to finish; its mute discards samples
+# rather than closing the device. Teams and Meet are untested — check with
+# `mic-in-use --list` while muted.
 #
 # There is deliberately no Do Not Disturb rule. The only headless-readable Focus
 # source (~/Library/DoNotDisturb/DB/Assertions.json) is an append-only ledger

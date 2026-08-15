@@ -29,17 +29,29 @@ merely open — which would suppress the chime all day. Add more with
 
 ### Muted meetings
 
-Being muted is **not** treated as being in a meeting: a muted call is one you can
-be interrupted during. Whether the chime actually returns while muted depends on
-the app — it does if the app releases the input stream when you mute, and does
-not if the app keeps capturing and discards samples itself. Check yours:
+The intent is that being muted should *not* count as being in a meeting — a muted
+call is one you can be interrupted during. Whether that actually happens is up to
+the app: it only works if the app releases the input stream on mute.
+
+**Zoom does not.** Verified in a real call: the built-in mic stays `RUNNING` the
+whole time, muted or not. So in practice a Zoom call suppresses the chime start
+to finish, and the muted-is-fine intent has no effect there. Zoom's mute is
+implemented by discarding captured samples, not by closing the device.
+
+Teams and Meet are untested. Check any app with:
 
 ```bash
 mic-in-use --list
 ```
 
-Run it while muted in a real call. If the built-in mic still shows `RUNNING`,
-that app holds the stream while muted and the chime will stay suppressed.
+Run it while muted in a real call. `RUNNING` means that app holds the stream
+while muted and the chime stays suppressed for the whole call; `idle` means it
+releases the stream and the chime returns while you are muted.
+
+Making mute genuinely un-suppress the chime would require per-app mute state
+(Zoom's AppleScript dictionary, Teams' logs) rather than the device-level signal
+this uses — a much larger and more fragile thing than the current one property
+read, and not worth it unless the all-call suppression proves annoying.
 
 ### No Do Not Disturb rule
 
