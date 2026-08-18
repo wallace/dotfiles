@@ -107,6 +107,65 @@ Signed-By: /usr/share/keyrings/signal-desktop-keyring.gpg"
     || warn "Signal's apt repo is configured; retry later with 'sudo apt install signal-desktop'."
 }
 
+install_1password() {
+  step "1Password (official 1Password apt repository)"
+
+  local arch; arch="$(dpkg --print-architecture)"
+  case "$arch" in
+    amd64|arm64) : ;;
+    *) warn "1Password publishes amd64 and arm64 only (this box is $arch). Skipping."; return 0 ;;
+  esac
+
+  install_keyring \
+    "https://downloads.1password.com/linux/keys/1password.asc" \
+    "/usr/share/keyrings/1password-archive-keyring.gpg" \
+    "$ONEPASSWORD_FPR" \
+    --dearmor
+
+  write_apt_source /etc/apt/sources.list.d/1password.list \
+"deb [arch=$arch signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/$arch stable main"
+
+  # 1Password is the only vendor here that signs the .deb itself, not just the
+  # repository index. apt's signature proves the index came from 1Password;
+  # debsig-verify proves the package did, which still holds if a .deb reaches
+  # the box by some route other than this repo. Setting it up is part of
+  # 1Password's documented install, and it is the strongest guarantee any
+  # package in this script offers, so it is worth the extra few lines.
+  #
+  # debsig identifies an origin by the low 64 bits of the fingerprint, and uses
+  # that as the directory name under both trees below.
+  local keyid="${ONEPASSWORD_FPR: -16}"
+  install_keyring \
+    "https://downloads.1password.com/linux/keys/1password.asc" \
+    "/usr/share/debsig/keyrings/$keyid/debsig.gpg" \
+    "$ONEPASSWORD_FPR" \
+    --dearmor
+
+  # Written literally rather than curl'd, for the same reason the apt sources
+  # are: this policy is what decides which key may sign these packages, so it
+  # belongs in git where it can be reviewed, not fetched fresh on every run.
+  write_system_file "/etc/debsig/policies/$keyid/1password.pol" \
+"<?xml version=\"1.0\"?>
+<!DOCTYPE Policy SYSTEM \"https://www.debian.org/debsig/1.0/policy.dtd\">
+<Policy xmlns=\"https://www.debian.org/debsig/1.0/\">
+    <Origin Name=\"1Password\" id=\"$keyid\" Description=\"Password manager and secure wallet\"/>
+    <Selection>
+        <Required Type=\"origin\" File=\"debsig.gpg\" id=\"$keyid\"/>
+    </Selection>
+    <Verification MinOptional=\"0\">
+        <Required Type=\"origin\" File=\"debsig.gpg\" id=\"$keyid\"/>
+    </Verification>
+</Policy>"
+
+  apt_update_once
+  apt_install_optional 1password \
+    || warn "1Password's apt repo is configured; retry with 'sudo apt install 1password'."
+  # The CLI ('op') ships from the same signed repo. Drop this call if you only
+  # want the desktop app.
+  apt_install_optional 1password-cli \
+    || warn "1Password CLI skipped; 'sudo apt install 1password-cli' when you want 'op'."
+}
+
 install_github_cli() {
   step "GitHub CLI (official GitHub apt repository)"
 
@@ -310,6 +369,8 @@ ${C_GREEN}───────────────────────�
   vim              $(have vim && echo 'installed' || echo 'MISSING')
   telegram         ${TELEGRAM_CHOICE:-not configured}
   signal           $(have signal-desktop && echo 'installed' || echo 'not installed')
+  1password        $(have 1password && echo 'installed' || echo 'not installed')
+  op (1p cli)      $(have op && echo 'installed' || echo 'not installed')
   gh (github cli)  $(have gh && echo 'installed' || echo 'not installed')
   claude (code)    $(have claude && echo 'installed' || echo 'not installed')
   claude-desktop   $(have claude-desktop && echo 'installed' || echo 'not installed')
@@ -318,6 +379,7 @@ ${C_GREEN}───────────────────────�
 Signing keys pinned and verified this run:
   Anthropic  $ANTHROPIC_FPR
   Signal     $SIGNAL_FPR
+  1Password  $ONEPASSWORD_FPR
   GitHub     ${GH_FPR// /
              }
 
@@ -327,7 +389,7 @@ Next steps:
   3. Launch Claude Desktop from your app launcher, or run 'claude-desktop'.
 
 Updates:
-  Signal, Claude Desktop            ->  sudo apt update && sudo apt upgrade
+  Signal, 1Password, Claude Desktop ->  sudo apt update && sudo apt upgrade
   Claude Code                       ->  self-updates; force with 'claude update'
   WhatSie AppImage, if installed    ->  re-run this script to fetch the latest
 
@@ -345,6 +407,7 @@ main() {
   install_base
   install_telegram
   install_signal
+  install_1password
   install_github_cli
   install_claude_code
   install_claude_desktop
