@@ -25,10 +25,11 @@ _DOTFILES_UBUNTU_COMMON_SH=1
 #   Signal:    https://signal.org/download/linux/
 readonly ANTHROPIC_FPR="31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE"
 readonly SIGNAL_FPR="DBA36B5181D0C816F630E889D980A17457F6FB06"
-# GitHub CLI's key expires 2026-09-05. When it rolls, this pin must be updated
-# from https://cli.github.com/packages/githubcli-archive-keyring.gpg or the
-# install will (correctly) refuse to proceed.
-readonly GH_FPR="2C6106201985B60E6C7AC87323F3D4EA75716059"
+# GitHub CLI ships *two* keys in one keyring: the key currently signing the
+# archive, which expires 2026-09-05, and the successor it rolls to. Both are
+# pinned, so the rollover does not break the install and does not tempt anyone
+# into re-pinning in a hurry. A third, unexpected key still fails the check.
+readonly GH_FPR="2C6106201985B60E6C7AC87323F3D4EA75716059 7F38BBB59D064DBCB3D84D725612B36462313325"
 
 # --- Output ----------------------------------------------------------------
 
@@ -115,7 +116,10 @@ apt_update_once() {
 apt_refresh_needed() { _APT_UPDATED=0; }
 
 pkg_installed() {
-  dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q "ok installed"
+  local st=""
+  st="$(dpkg-query -W -f='${Status}' "$1" 2>/dev/null)" || return 1
+  case "$st" in *"ok installed"*) return 0 ;; esac
+  return 1
 }
 
 # Idempotent install: skip packages already present so re-runs are fast and quiet.
@@ -134,39 +138,110 @@ apt_install() {
   ok "installed ${want[*]}"
 }
 
+# True when apt can resolve the package to a real installation candidate from
+# the sources configured right now. A package the archive never carried, and a
+# package whose component is disabled, both come back false.
+# Note the shape: the candidate is captured, then tested. The obvious
+# `apt-cache policy X | grep -q ...` is a trap under `set -o pipefail` — grep -q
+# exits on the first match and apt-cache dies of SIGPIPE mid-write, so the
+# pipeline reports 141 and the check says "unavailable" for every package.
+apt_available() {
+  local cand=""
+  cand="$(apt-cache policy "$1" 2>/dev/null | awk '/Candidate:/ {print $2}')" || cand=""
+  [ -n "$cand" ] && [ "$cand" != "(none)" ]
+}
+
+# True when the 'universe' component is enabled, in either the deb822 format
+# Ubuntu now ships or the legacy one-line format.
+universe_enabled() {
+  grep -rqsE '^[[:space:]]*Components:.*[[:space:]]universe([[:space:]]|$)' \
+    /etc/apt/sources.list.d/ && return 0
+  grep -rqsE '^[[:space:]]*deb[[:space:]].*[[:space:]]universe([[:space:]]|$)' \
+    /etc/apt/sources.list /etc/apt/sources.list.d/ && return 0
+  return 1
+}
+
+# Install a package we would like but can live without. Unlike apt_install,
+# a package the configured sources cannot supply is a warning and a non-zero
+# return, not a fatal error.
+#
+# This distinction matters: these scripts install a handful of independent
+# apps, and one of them going missing from the archive must not abort the run
+# and cost you the other five. Genuinely required things (curl, gnupg) still
+# go through apt_install and still abort.
+#
+# Returns non-zero on skip/failure, so callers must handle it (`|| note=...`)
+# rather than letting `set -e` fire.
+apt_install_optional() {
+  local pkg="$1"
+  if pkg_installed "$pkg"; then
+    ok "already installed: $pkg"
+    return 0
+  fi
+  apt_update_once
+  if ! apt_available "$pkg"; then
+    warn "$pkg: no installation candidate from any configured apt source."
+    return 1
+  fi
+  step "Installing: $pkg"
+  if sudo apt-get install -y -q "$pkg"; then
+    ok "installed $pkg"
+    return 0
+  fi
+  warn "failed to install $pkg — continuing with the rest of the run."
+  return 1
+}
+
 # --- Key handling ----------------------------------------------------------
 
-# Download a signing key and refuse to install it unless its fingerprint matches
-# the value pinned above. This is the single most important function in the
-# repo: without the fingerprint check, "download the key over HTTPS" trusts
-# whoever is answering for that hostname today.
+# Download a signing key and refuse to install it unless every key it contains
+# matches a fingerprint pinned above. This is the single most important
+# function in the repo: without the fingerprint check, "download the key over
+# HTTPS" trusts whoever is answering for that hostname today.
 #
-# Usage: install_keyring <url> <dest> <expected-fingerprint> [--dearmor]
+# We check every key in the file, not just the first one. A vendor keyring may
+# legitimately carry more than one key (GitHub CLI ships its current key plus
+# the successor it will roll to), and apt trusts all of them equally — so
+# verifying only the first would let anyone who can tamper with the download
+# append a key of their own and have apt honour it.
+#
+# Usage: install_keyring <url> <dest> <expected-fingerprints> [--dearmor]
+#        <expected-fingerprints> is a space-separated allowlist.
 install_keyring() {
-  local url="$1" dest="$2" want_fpr="$3" dearmor="${4:-}"
-  local tmp got
+  local url="$1" dest="$2" want_fprs="$3" dearmor="${4:-}"
+  local tmp got=() f w known
 
   tmp="$(mktemp)" || die "mktemp failed"
+  # Cleaned up on return, and on exit too, since die() leaves via exit.
   # shellcheck disable=SC2064
-  trap "rm -f '$tmp'" RETURN
+  trap "rm -f '$tmp'" RETURN EXIT
 
   curl -fsSL --proto '=https' --tlsv1.2 "$url" -o "$tmp" \
     || die "could not download signing key from $url"
 
-  # Read the fingerprint straight from the downloaded file, before it is
-  # anywhere apt would consult it.
-  got="$(gpg --show-keys --with-colons --fingerprint "$tmp" 2>/dev/null \
-         | awk -F: '/^fpr:/ {print $10; exit}')"
+  # Read the fingerprints straight from the downloaded file, before it is
+  # anywhere apt would consult it. Only primary keys: gpg emits an fpr record
+  # for each subkey too, and those are not what apt pins on.
+  mapfile -t got < <(gpg --show-keys --with-colons "$tmp" 2>/dev/null | awk -F: '
+    $1 == "pub" { primary = 1; next }
+    $1 == "fpr" && primary { print $10; primary = 0 }
+  ')
 
-  [ -n "$got" ] || die "no OpenPGP key found in the download from $url.
+  [ ${#got[@]} -gt 0 ] || die "no OpenPGP key found in the download from $url.
      The download likely returned an error page rather than a key."
 
-  if [ "$got" != "$want_fpr" ]; then
-    die "SIGNING KEY FINGERPRINT MISMATCH for $url
-     expected: $want_fpr
-     received: $got
-     Refusing to install this key. Do not proceed until you know why."
-  fi
+  for f in "${got[@]}"; do
+    known=0
+    # Deliberately unquoted: $want_fprs is a space-separated allowlist.
+    # shellcheck disable=SC2086
+    for w in $want_fprs; do
+      if [ "$f" = "$w" ]; then known=1; break; fi
+    done
+    [ "$known" -eq 1 ] || die "UNPINNED SIGNING KEY in the download from $url
+     received:        $f
+     expected one of: $want_fprs
+     Refusing to install this keyring. Do not proceed until you know why."
+  done
 
   sudo install -d -m 0755 "$(dirname "$dest")"
   if [ "$dearmor" = "--dearmor" ]; then
@@ -176,7 +251,8 @@ install_keyring() {
     sudo install -m 0644 "$tmp" "$dest" || die "could not write $dest"
   fi
   sudo chmod 0644 "$dest"
-  ok "verified and installed signing key: $dest ($want_fpr)"
+  ok "verified and installed signing key: $dest"
+  for f in "${got[@]}"; do ok "  pinned fingerprint $f"; done
 }
 
 # Write an apt source only when the content differs, so re-runs don't

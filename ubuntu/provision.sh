@@ -24,6 +24,8 @@ _here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 
 WHATSAPP_URL="https://web.whatsapp.com"
 WHATSAPP_CHOICE=""   # filled in by the prompt, reported in the summary
+TELEGRAM_URL="https://web.telegram.org"
+TELEGRAM_CHOICE=""   # apt package, or the web app when the archive lacks it
 
 # Reuse the installer functions from the minimal script by sourcing the parts
 # we need. They are duplicated here rather than extracted so each script stays
@@ -38,19 +40,47 @@ install_base() {
 }
 
 install_telegram() {
-  step "Telegram Desktop (Ubuntu archive)"
-  if ! apt-cache policy telegram-desktop 2>/dev/null | grep -q 'Candidate: [^(]'; then
+  step "Telegram Desktop"
+
+  apt_update_once
+
+  # telegram-desktop lives in 'universe'. That is on by default on a desktop
+  # install but off on some minimal and cloud images. Only touch the repo
+  # config when it is genuinely off: add-apt-repository costs a sudo prompt and
+  # a full package-list refresh, and running it needlessly is what made this
+  # step ask for a password twice.
+  if ! apt_available telegram-desktop && ! universe_enabled; then
     warn "telegram-desktop not available. Enabling the 'universe' component."
     if have add-apt-repository; then
       sudo add-apt-repository -y universe || warn "could not enable universe"
       apt_refresh_needed
       apt_update_once
     else
-      warn "add-apt-repository missing; install software-properties-common and re-run."
-      return 0
+      warn "add-apt-repository missing; install software-properties-common to enable universe."
     fi
   fi
-  apt_install telegram-desktop
+
+  if apt_available telegram-desktop; then
+    if apt_install_optional telegram-desktop; then
+      TELEGRAM_CHOICE="telegram-desktop (apt)"
+    else
+      TELEGRAM_CHOICE="install failed — use $TELEGRAM_URL"
+    fi
+    return 0
+  fi
+
+  # Ubuntu dropped telegram-desktop after 22.04 (jammy): it is absent from
+  # noble, plucky, questing and resolute. What is left is a snap, a Flatpak, or
+  # Telegram's own tarball — a self-updating unsigned binary. None of those fit
+  # "signed apt repos only", and the web app needs no new binary at all, so we
+  # land where the WhatsApp step already lands.
+  warn "Ubuntu dropped telegram-desktop from the archive after 22.04 (jammy);"
+  warn "it is not in ${VERSION_CODENAME:-this release}, and there is no official"
+  warn "Telegram apt repository to fall back to."
+  ok "using the browser: $TELEGRAM_URL"
+  ok "install it as a PWA for a launcher icon and its own window — same trade"
+  ok "as WhatsApp in WHATSAPP_ALTERNATIVES.md, and no extra binary to patch."
+  TELEGRAM_CHOICE="browser — $TELEGRAM_URL"
 }
 
 install_signal() {
@@ -73,7 +103,8 @@ Components: main
 Architectures: amd64
 Signed-By: /usr/share/keyrings/signal-desktop-keyring.gpg"
   apt_update_once
-  apt_install signal-desktop
+  apt_install_optional signal-desktop \
+    || warn "Signal's apt repo is configured; retry later with 'sudo apt install signal-desktop'."
 }
 
 install_github_cli() {
@@ -97,7 +128,11 @@ install_github_cli() {
 "deb [arch=$arch signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main"
 
   apt_update_once
-  apt_install_unless_brew gh
+  if brew_provides gh; then
+    ok "gh provided by Homebrew ($(command -v gh 2>/dev/null || echo 'on PATH')) — skipping apt copy"
+  else
+    apt_install_optional gh || warn "GitHub CLI could not be installed; continuing."
+  fi
 }
 
 install_claude_code() {
@@ -131,13 +166,17 @@ install_claude_desktop() {
   write_apt_source /etc/apt/sources.list.d/claude-desktop.list \
 "deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/claude-desktop-archive-keyring.asc] https://downloads.claude.ai/claude-desktop/apt/stable stable main"
   apt_update_once
-  apt_install claude-desktop
+  apt_install_optional claude-desktop \
+    || warn "Claude Desktop's apt repo is configured; retry with 'sudo apt install claude-desktop'."
 }
 
 # --- WhatsApp --------------------------------------------------------------
 
+# The menu goes to stderr on purpose. This function's stdout is captured by the
+# caller to get the answer, so anything printed there is invisible to the user
+# and ends up concatenated onto their keystroke — which matches no case arm.
 whatsapp_prompt() {
-  cat <<EOF
+  cat >&2 <<EOF
 
 $C_BLUE──── WhatsApp ────$C_RESET
 
@@ -155,7 +194,7 @@ See WHATSAPP_ALTERNATIVES.md for the full security comparison.
 EOF
   local choice
   read -r -p "Choose [1-4, default 3]: " choice || choice=""
-  echo "${choice:-3}"
+  printf '%s\n' "${choice:-3}"
 }
 
 install_whatsie() {
@@ -187,9 +226,13 @@ install_whatsie() {
         | head -n1 | cut -d'"' -f4 || true)"
 
   if [ -z "$url" ]; then
-    warn "could not resolve a WhatSie AppImage from the GitHub API."
-    warn "Download it manually: https://github.com/keshavbhatt/whatsie/releases"
-    WHATSAPP_CHOICE="failed (see above) — use $WHATSAPP_URL"
+    warn "the latest WhatSie release publishes no AppImage asset."
+    warn "Upstream has shipped source-only releases for some time and distributes"
+    warn "builds through the Snap store, which this repo deliberately avoids."
+    warn "Check https://github.com/keshavbhatt/whatsie/releases yourself, or use"
+    warn "the browser/PWA route in WHATSAPP_ALTERNATIVES.md — it is the better"
+    warn "trade anyway."
+    WHATSAPP_CHOICE="unavailable (no AppImage published) — use $WHATSAPP_URL"
     return 0
   fi
 
@@ -265,7 +308,7 @@ $C_GREEN Provisioning complete$C_RESET
 ${C_GREEN}────────────────────────────────────────────────────────$C_RESET
 
   vim              $(have vim && echo 'installed' || echo 'MISSING')
-  telegram         $(have telegram-desktop && echo 'installed' || echo 'not installed')
+  telegram         ${TELEGRAM_CHOICE:-not configured}
   signal           $(have signal-desktop && echo 'installed' || echo 'not installed')
   gh (github cli)  $(have gh && echo 'installed' || echo 'not installed')
   claude (code)    $(have claude && echo 'installed' || echo 'not installed')
@@ -275,6 +318,8 @@ ${C_GREEN}───────────────────────�
 Signing keys pinned and verified this run:
   Anthropic  $ANTHROPIC_FPR
   Signal     $SIGNAL_FPR
+  GitHub     ${GH_FPR// /
+             }
 
 Next steps:
   1. Open a new shell (or: source ~/.bashrc) so ~/.local/bin is on PATH.
@@ -282,7 +327,7 @@ Next steps:
   3. Launch Claude Desktop from your app launcher, or run 'claude-desktop'.
 
 Updates:
-  Signal, Telegram, Claude Desktop  ->  sudo apt update && sudo apt upgrade
+  Signal, Claude Desktop            ->  sudo apt update && sudo apt upgrade
   Claude Code                       ->  self-updates; force with 'claude update'
   WhatSie AppImage, if installed    ->  re-run this script to fetch the latest
 
