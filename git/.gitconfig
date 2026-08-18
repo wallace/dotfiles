@@ -66,9 +66,9 @@
 	autosquash = true
 [stash]
 	showPatch = true
-[includeIf "gitdir:/Users"]
+[includeIf "gitdir:/Users/"]
   path = ~/.gitconfig-macos
-[includeIf "gitdir:/home"]
+[includeIf "gitdir:/home/"]
   path = ~/.gitconfig-linux
 [includeIf "gitdir:C:/"]
   path = ~/.gitconfig-windows
