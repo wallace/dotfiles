@@ -26,6 +26,58 @@ $ brew bundle # installs all things listed in Brewfile
 $ # Note: reattach-to-user-namespace and ical-buddy are macOS-only and will be skipped
 ```
 
+##### Full Linux walkthrough (fresh box, only git and zsh installed)
+
+`install.sh` does **not** apply here — its body is gated behind
+`if [ "$CODESPACES" == "true" ]` and it exits without doing anything on an
+ordinary machine. Use these steps instead.
+
+Two hard dependencies first: `.zshrc` calls `source $ZSH/oh-my-zsh.sh` and
+`prompt pure` unguarded, so zsh errors on startup if either is missing.
+Install both before stowing.
+
+```
+$ # 1. stow is the bootstrap dependency — apt, so it's available immediately
+$ sudo apt update && sudo apt install -y stow
+$
+$ # 2. Homebrew, then the Brewfile (vim, tmux, fzf, ripgrep, gh, direnv, ...)
+$ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+$ eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"   # needed now; .zshrc handles it later
+$ cd ~/dotfiles && brew bundle
+$
+$ # 3. oh-my-zsh (required by .zshrc)
+$ sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended --keep-zshrc
+$
+$ # 4. pure prompt (required by .zshrc)
+$ git clone https://github.com/sindresorhus/pure.git ~/.zsh/pure
+$
+$ # 5. clear the way — stow refuses to clobber a real file
+$ mv ~/.zshrc ~/.zshrc.bak 2>/dev/null; rm -f ~/.zshrc
+$
+$ # 6. stow the cross-platform packages (see Steps below for the macOS-only ones)
+$ cd ~/dotfiles && stow -t ~ zsh bash git vim nvim tmux readline ctags \
+    base16-shell scripts claude copilot-cli irb rspec rubygems \
+    ruby_debugger rbenv obsidian kitty lein
+$
+$ # 7. vim (.vimrc bootstraps vim-plug itself; ~/.vim-tmp prevents write errors)
+$ mkdir -p ~/.vim-tmp && vim +PlugUpdate +qa
+$
+$ # 8. make zsh your login shell, then log out and back in
+$ chsh -s "$(command -v zsh)"
+```
+
+Every formula in the Brewfile ships a prebuilt Linux bottle (x86_64 and arm64),
+so `brew bundle` downloads binaries rather than compiling. Homebrew's own
+installer may still ask for `build-essential`.
+
+If a stow step aborts on a conflict, dry-run it to see what's in the way:
+
+```
+$ stow -n -v -t ~ zsh
+```
+
+Back up whatever it names, remove it, and re-run.
+
 #### Ubuntu desktop provisioning
 
 For a fresh Ubuntu box that also needs desktop apps (vim, Telegram, Signal,
@@ -99,6 +151,8 @@ New-Item -ItemType HardLink -Path "$env:USERPROFILE\Documents\PowerShell\Microso
 
 #### All Platforms
 
+Already covered by the [full Linux walkthrough](#full-linux-walkthrough-fresh-box-only-git-and-zsh-installed) — skip this if you followed it.
+
 ```
 $ # set up oh-my-zsh
 $ sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
@@ -108,29 +162,63 @@ $ rm ~/.zshrc
 
 ### Steps
 
+#### Cross-platform packages (macOS and Linux)
+
 ```
 $ stow zsh
+$ stow bash
+$ stow git
+$ stow vim
+$ stow nvim
+$ stow tmux
+$ stow readline
 $ stow ctags
 $ stow base16-shell
-$ stow git
+$ stow scripts
+$ stow claude
+$ stow copilot-cli
+$ stow irb
+$ stow rspec
+$ stow rubygems
+$ stow ruby_debugger
+$ stow rbenv
+$ stow obsidian
+$ stow kitty
+$ stow lein
+```
+
+#### macOS-only packages
+
+These place files under `~/Library` or depend on macOS-only facilities, so
+skip them on Linux:
+
+| Package | Why macOS-only |
+| --- | --- |
+| `hammerspoon` | Hammerspoon is a macOS-only automation app |
+| `launchagents` | `~/Library/LaunchAgents` — launchd is macOS |
+| `chime` | launchd agent plus a Swift CoreAudio helper |
+| `voice-pipeline` | MacWhisper, `osascript`, and Keychain lookups |
+| `offlineimap` | reads passwords from `~/Library/Keychains` via `/usr/bin/security` |
+| `msmtp` | `tls_trust_file` points at a macOS Homebrew cert path |
+| `mutt`, `notmuch` | portable themselves, but only useful with the two above |
+
+```
 $ stow hammerspoon
 $ stow launchagents
+$ stow chime
+$ stow voice-pipeline
 $ stow mutt
 $ stow notmuch
 $ stow offlineimap
-$ stow rbenv
-$ stow readline
-$ stow rspec
-$ stow ruby_debugger
-$ stow rubygems
-$ stow scripts
-$ stow copilot-cli
-$ stow tmux
-$ stow vim
-$ stow irb
-$ stow nvim
-$ stow obsidian
-$ stow voice-pipeline
+$ stow msmtp
+```
+
+`powershell` is Windows-only (`Documents/PowerShell`) — see the Windows
+section above.
+
+#### Afterwards
+
+```
 $ # install latest node version and set to global in nodenv
 $ curl -fLo ~/.vim/autoload/plug.vim --create-dirs \
     https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
@@ -179,8 +267,10 @@ The following packages are only installed on macOS (no Linux bottles available):
 
 ### WSL2 / Linux considerations
 
-- Ensure brew is in your PATH by adding `eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"` to your shell profile
+- `.zshrc` already runs `brew shellenv` on Linux when `/home/linuxbrew/.linuxbrew/bin/brew` exists, so no shell-profile edit is needed once `zsh` is stowed. You do need `eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"` in the *current* shell before that point.
 - tmux copy/paste works differently on Linux; `reattach-to-user-namespace` is not needed
+- **brew vs apt:** brew owns the CLI tooling in the Brewfile; apt owns `stow` (needed to bootstrap) plus GUI and security-sensitive apps. Installing the same tool both ways leaves two copies with brew shadowing apt on `PATH` — [ubuntu/provision.sh](ubuntu/provision.sh) detects brew and skips the apt duplicate for exactly this reason.
+- `install.sh` is Codespaces-only and is a no-op on a normal Linux box.
 
 ### Windows (Native) considerations
 
