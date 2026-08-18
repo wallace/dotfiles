@@ -116,3 +116,10 @@ dotfiles_install.log
 ubuntu/*.AppImage
 ubuntu/*.AppImage.sha256
 ubuntu/*.deb
+
+# rbenv installs Ruby versions, shims, and the active version marker into the
+# stow package directory. These are machine-local build output (multi-GB), not
+# configuration. rbenv/.rbenv/default-gems IS tracked — it is real config.
+rbenv/.rbenv/versions/
+rbenv/.rbenv/shims/
+rbenv/.rbenv/version

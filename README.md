@@ -32,9 +32,10 @@ $ # Note: reattach-to-user-namespace and ical-buddy are macOS-only and will be s
 `if [ "$CODESPACES" == "true" ]` and it exits without doing anything on an
 ordinary machine. Use these steps instead.
 
-Two hard dependencies first: `.zshrc` calls `source $ZSH/oh-my-zsh.sh` and
-`prompt pure` unguarded, so zsh errors on startup if either is missing.
-Install both before stowing.
+`.zshrc` calls `source $ZSH/oh-my-zsh.sh` and `prompt pure` unguarded, so zsh
+errors on startup if either is missing. `brew bundle` (step 2) installs pure and
+`.zshrc` picks it up from brew's `site-functions`; oh-my-zsh needs its own
+installer. Both must land before stowing.
 
 ```
 $ # 1. stow is the bootstrap dependency — apt, so it's available immediately
@@ -48,30 +49,21 @@ $
 $ # 3. oh-my-zsh (required by .zshrc). CHSH/RUNZSH as env vars, not just
 $ #    --unattended: the flag only reaches the script through that empty ""
 $ #    positional, and it prompts to change your shell if it gets dropped.
-$ #    Step 8 changes the shell instead.
+$ #    Step 7 changes the shell instead.
 $ CHSH=no RUNZSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended --keep-zshrc
 $
-$ # 4. pure prompt — ONLY if you skipped Homebrew. `brew bundle` already
-$ #    installs pure, and .zshrc finds it via brew's site-functions.
-$ #    .zshrc checks both locations, so either works.
-$ [ -d /home/linuxbrew/.linuxbrew/share/zsh/site-functions ] || \
-    git clone https://github.com/sindresorhus/pure.git ~/.zsh/pure
-$
-$ # 5. clear the way — stow refuses to clobber a real file.
-$ #    Alternative: `stow --adopt zsh` pulls the existing file INTO the repo
-$ #    and symlinks to it. Handy, but it overwrites the repo's tracked copy,
-$ #    so run `git diff` right after and `git checkout zsh/` if it ate yours.
+$ # 4. clear the way — stow refuses to clobber a real file
 $ mv ~/.zshrc ~/.zshrc.bak 2>/dev/null; rm -f ~/.zshrc
 $
-$ # 6. stow the cross-platform packages (see Steps below for the macOS-only ones)
+$ # 5. stow the cross-platform packages (see Steps below for the macOS-only ones)
 $ cd ~/dotfiles && stow -t ~ zsh bash git vim nvim tmux readline ctags \
     base16-shell scripts claude copilot-cli irb rspec rubygems \
     ruby_debugger rbenv obsidian kitty lein
 $
-$ # 7. vim (.vimrc bootstraps vim-plug itself; ~/.vim-tmp prevents write errors)
+$ # 6. vim (.vimrc bootstraps vim-plug itself; ~/.vim-tmp prevents write errors)
 $ mkdir -p ~/.vim-tmp && vim +PlugUpdate +qa
 $
-$ # 8. make zsh your login shell, then log out and back in
+$ # 7. make zsh your login shell, then log out and back in
 $ chsh -s "$(command -v zsh)"
 ```
 
@@ -86,16 +78,6 @@ $ stow -n -v -t ~ zsh
 ```
 
 Back up whatever it names, remove it, and re-run.
-
-`stow --adopt <package>` is the quicker route: it moves the conflicting file
-into the repo and symlinks to it. Note the direction — the file on disk
-**replaces** the repo's tracked copy, so a stray default `.zshrc` can silently
-overwrite yours. Always follow it with:
-
-```
-$ git -C ~/dotfiles diff        # see what adopt pulled in
-$ git -C ~/dotfiles checkout zsh/   # undo if it overwrote the good copy
-```
 
 #### Ubuntu desktop provisioning
 
