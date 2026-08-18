@@ -200,8 +200,11 @@ export SCM_CHECK=true
 # after enabling or disabling aliases, plugins, and completions.
 # export BASH_IT_AUTOMATIC_RELOAD_AFTER_CONFIG_CHANGE=1
 
-# Load Bash It
-source $BASH_IT/bash_it.sh
+# Load Bash It, if it is installed. bash-it is cloned from upstream rather than
+# vendored here, so guard the source: without this, every bash startup on a box
+# that never ran the clone fails with "No such file or directory".
+#   git clone --depth=1 https://github.com/Bash-it/bash-it.git ~/.bash_it
+[ -s "$BASH_IT/bash_it.sh" ] && source "$BASH_IT/bash_it.sh"
 
 export PATH="$HOME/.pyenv/bin:$PATH"
 eval "$(pyenv init -)"
