@@ -10,3 +10,109 @@ startup.log
 issue-report*.md
 issue-reports/data/
 .cache/issue-reports/
+
+# ---------------------------------------------------------------------------
+# Secrets — never commit. A dotfiles repo is the classic place these leak from,
+# because the files live in $HOME next to things you DO want tracked.
+# ---------------------------------------------------------------------------
+.ssh/
+**/.ssh/
+id_rsa
+id_ed25519
+id_ecdsa
+*.pem
+*.key
+*.ppk
+known_hosts
+authorized_keys
+
+.gnupg/
+**/.gnupg/
+secring.*
+*.private.gpg
+*.private.asc
+private-key*.asc
+
+.aws/
+.azure/
+.kube/
+.aws/credentials
+**/.aws/credentials
+.netrc
+**/.netrc
+.docker/config.json
+
+*.env
+.env
+.env.*
+!.env.example
+!.env.sample
+.envrc.local
+*_token
+*_secret
+*apikey*
+*api_key*
+.dotoverrides/
+
+# Local machine overrides. Deliberately narrow: this repo tracks
+# bash/.bashrc.local and friends on purpose, so no blanket *.local rule.
+*.secret.local
+.env.local
+
+# ---------------------------------------------------------------------------
+# Editor and OS noise
+# ---------------------------------------------------------------------------
+*~
+*.swp
+*.swo
+*.swn
+.*.sw[a-p]
+\#*\#
+.\#*
+*.bak
+*.orig
+*.rej
+.vscode/
+.idea/
+*.iml
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------------------
+# Build artifacts, caches, dependencies
+# ---------------------------------------------------------------------------
+node_modules/
+.npm/
+.yarn/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.gem
+.bundle/
+vendor/bundle/
+target/
+dist/
+build/
+*.o
+*.so
+*.dylib
+*.log
+/.cache/
+*.tmp
+*.temp
+.tmp/
+
+# Provisioning run artifacts
+dotfiles_install.log
+ubuntu/*.AppImage
+ubuntu/*.AppImage.sha256
+ubuntu/*.deb

@@ -1,0 +1,401 @@
+#!/usr/bin/env bash
+#
+# provision-minimal.sh — non-interactive Ubuntu provisioning.
+#
+# Installs: vim, Telegram, Signal, Claude Code, Claude Desktop.
+# WhatsApp defaults to the browser (https://web.whatsapp.com); see
+# WHATSAPP_ALTERNATIVES.md for why, and for the native-wrapper options.
+#
+# Every package comes from an official vendor repository whose signing key is
+# pinned by fingerprint below. No snaps. No third-party builds.
+#
+# Usage:
+#   ./provision-minimal.sh
+#   curl -fsSL https://raw.githubusercontent.com/<you>/dotfiles/main/ubuntu/provision-minimal.sh | bash
+#
+# Before piping this into bash, read it. That advice applies to every
+# curl|bash one-liner, including this one.
+#
+# Environment overrides:
+#   SKIP_DESKTOP=1   skip Claude Desktop (headless/server boxes)
+#   SKIP_SIGNAL=1    skip Signal
+#   SKIP_TELEGRAM=1  skip Telegram
+
+set -euo pipefail
+
+# This script is self-contained so it works when piped from curl, where a
+# sibling lib/common.sh would not exist. If it is present next to the script
+# (git clone case) we prefer it, so there is one copy to maintain.
+_here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
+if [ -n "$_here" ] && [ -r "$_here/lib/common.sh" ]; then
+  # shellcheck source=lib/common.sh
+  . "$_here/lib/common.sh"
+else
+  # --- inlined from lib/common.sh (keep in sync) ---------------------------
+  readonly ANTHROPIC_FPR="31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE"
+  readonly SIGNAL_FPR="DBA36B5181D0C816F630E889D980A17457F6FB06"
+# GitHub CLI's key expires 2026-09-05. When it rolls, this pin must be updated
+# from https://cli.github.com/packages/githubcli-archive-keyring.gpg or the
+# install will (correctly) refuse to proceed.
+readonly GH_FPR="2C6106201985B60E6C7AC87323F3D4EA75716059"
+  if [ -t 1 ]; then
+    readonly C_RESET=$'\033[0m' C_BLUE=$'\033[1;34m' C_GREEN=$'\033[1;32m'
+    readonly C_YELLOW=$'\033[1;33m' C_RED=$'\033[1;31m'
+  else
+    readonly C_RESET='' C_BLUE='' C_GREEN='' C_YELLOW='' C_RED=''
+  fi
+  step() { printf '\n%s==>%s %s\n' "$C_BLUE" "$C_RESET" "$*"; }
+  ok()   { printf '%s  ok%s %s\n' "$C_GREEN" "$C_RESET" "$*"; }
+  warn() { printf '%swarn%s %s\n' "$C_YELLOW" "$C_RESET" "$*" >&2; }
+  die()  { printf '%sfail%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; exit 1; }
+  have() { command -v "$1" >/dev/null 2>&1; }
+  require_ubuntu() {
+    [ -r /etc/os-release ] || die "no /etc/os-release; this script targets Ubuntu/Debian."
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    case "${ID:-}${ID_LIKE:-}" in
+      *debian*|*ubuntu*) : ;;
+      *) die "unsupported distribution '${ID:-unknown}'. Targets Ubuntu 22.04+ / Debian 12+." ;;
+    esac
+    ok "detected ${PRETTY_NAME:-$ID}"
+  }
+  require_not_root() {
+    [ "$(id -u)" -ne 0 ] || die "run as your normal user, not root. The script sudos where needed."
+  }
+  require_sudo() {
+    have sudo || die "sudo not found."
+    if ! sudo -n true 2>/dev/null; then
+      if [ -t 0 ]; then
+        step "Requesting sudo (needed for apt and /usr/share/keyrings)"
+        sudo -v || die "could not obtain sudo."
+      else
+        die "sudo password required but stdin is not a terminal.
+     Run 'sudo -v' first, then re-run this script."
+      fi
+    fi
+    ok "sudo available"
+  }
+  _APT_UPDATED=0
+  apt_update_once() {
+    [ "$_APT_UPDATED" -eq 1 ] && return 0
+    step "Refreshing package lists"
+    sudo apt-get update -qq || die "apt-get update failed."
+    _APT_UPDATED=1
+  }
+  apt_refresh_needed() { _APT_UPDATED=0; }
+  pkg_installed() { dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q "ok installed"; }
+  apt_install() {
+    local want=() p
+    for p in "$@"; do pkg_installed "$p" || want+=("$p"); done
+    if [ ${#want[@]} -eq 0 ]; then ok "already installed: $*"; return 0; fi
+    apt_update_once
+    step "Installing: ${want[*]}"
+    sudo apt-get install -y -q "${want[@]}" || die "failed to install ${want[*]}"
+    ok "installed ${want[*]}"
+  }
+  require_tools() {
+    local missing=()
+    for t in curl gpg; do have "$t" || missing+=("$t"); done
+    if [ ${#missing[@]} -gt 0 ]; then
+      step "Installing prerequisites: ${missing[*]}"
+      apt_update_once
+      sudo apt-get install -y -q curl gnupg ca-certificates || die "could not install ${missing[*]}"
+    fi
+    ok "curl and gpg present"
+  }
+  install_keyring() {
+    local url="$1" dest="$2" want_fpr="$3" dearmor="${4:-}" tmp got
+    tmp="$(mktemp)" || die "mktemp failed"
+    # shellcheck disable=SC2064
+    trap "rm -f '$tmp'" RETURN
+    curl -fsSL --proto '=https' --tlsv1.2 "$url" -o "$tmp" \
+      || die "could not download signing key from $url"
+    got="$(gpg --show-keys --with-colons --fingerprint "$tmp" 2>/dev/null \
+           | awk -F: '/^fpr:/ {print $10; exit}')"
+    [ -n "$got" ] || die "no OpenPGP key found in the download from $url.
+     The download likely returned an error page rather than a key."
+    if [ "$got" != "$want_fpr" ]; then
+      die "SIGNING KEY FINGERPRINT MISMATCH for $url
+     expected: $want_fpr
+     received: $got
+     Refusing to install this key. Do not proceed until you know why."
+    fi
+    sudo install -d -m 0755 "$(dirname "$dest")"
+    if [ "$dearmor" = "--dearmor" ]; then
+      gpg --batch --yes --dearmor < "$tmp" | sudo tee "$dest" >/dev/null || die "could not write $dest"
+    else
+      sudo install -m 0644 "$tmp" "$dest" || die "could not write $dest"
+    fi
+    sudo chmod 0644 "$dest"
+    ok "verified and installed signing key: $dest ($want_fpr)"
+  }
+  write_apt_source() {
+    local dest="$1" content="$2"
+    if [ -f "$dest" ] && [ "$(sudo cat "$dest")" = "$content" ]; then
+      ok "apt source already current: $dest"; return 0
+    fi
+    printf '%s\n' "$content" | sudo tee "$dest" >/dev/null || die "could not write $dest"
+    sudo chmod 0644 "$dest"
+    apt_refresh_needed
+    ok "registered apt source: $dest"
+  }
+
+  # --- Homebrew coexistence --------------------------------------------------
+  #
+  # This repo's Brewfile installs vim, git, and gh among other CLI tools. If
+  # Linuxbrew is present those will shadow the apt copies on PATH, and you would
+  # be patching the same tool in two places.
+  #
+  # The division of labour we settled on:
+  #   apt  -> GUI apps and anything security-sensitive (Signal, Telegram,
+  #           Claude Desktop). Signed repos, pinned keys, one update channel.
+  #   brew -> developer CLI tooling that outpaces Ubuntu LTS (ripgrep, delta,
+  #           neovim, fzf). Not security-critical, and worth having current.
+  #
+  # So: when brew already provides a CLI tool, we skip the apt copy rather than
+  # installing a second one.
+  brew_provides() {
+    have brew || return 1
+    brew list --formula "$1" >/dev/null 2>&1
+  }
+  
+  # Install from apt unless Homebrew already provides it.
+  apt_install_unless_brew() {
+    local want=() p
+    for p in "$@"; do
+      if brew_provides "$p"; then
+        ok "$p provided by Homebrew ($(command -v "$p" 2>/dev/null || echo 'on PATH')) — skipping apt copy"
+      else
+        want+=("$p")
+      fi
+    done
+    [ ${#want[@]} -gt 0 ] && apt_install "${want[@]}"
+    return 0
+  }
+  
+  note_brew() {
+    have brew || return 0
+    step "Homebrew detected at $(command -v brew)"
+    ok "CLI tools from your Brewfile take precedence; apt duplicates are skipped"
+    ok "GUI and security-sensitive apps still come from signed apt repos"
+  }
+  ensure_local_bin_on_path() {
+    # Single-quoted on purpose: we want the literal $HOME written to the rc file
+  # so it resolves per-user at shell startup, not this script's HOME baked in.
+  # shellcheck disable=SC2016
+  local line='export PATH="$HOME/.local/bin:$PATH"'
+    local marker='# added by dotfiles/ubuntu provisioning: Claude Code lives in ~/.local/bin'
+    local rc found=0
+    for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+      [ -f "$rc" ] || continue
+      found=1
+      if grep -qF '.local/bin' "$rc"; then
+        ok "PATH already covers ~/.local/bin in $(basename "$rc")"; continue
+      fi
+      printf '\n%s\n%s\n' "$marker" "$line" >> "$rc"
+      ok "added ~/.local/bin to PATH in $(basename "$rc")"
+    done
+    if [ "$found" -eq 0 ]; then
+      printf '\n%s\n%s\n' "$marker" "$line" >> "$HOME/.profile"
+      ok "created ~/.profile with ~/.local/bin on PATH"
+    fi
+    case ":$PATH:" in
+      *":$HOME/.local/bin:"*) ;;
+      *) export PATH="$HOME/.local/bin:$PATH" ;;
+    esac
+  }
+  # --- end inlined library -------------------------------------------------
+fi
+
+WHATSAPP_URL="https://web.whatsapp.com"
+
+# ---------------------------------------------------------------------------
+# Installers. Each is idempotent and safe to re-run.
+# ---------------------------------------------------------------------------
+
+install_base() {
+  step "Base packages (vim and friends, from the Ubuntu archive)"
+  # curl/gnupg/ca-certificates always come from apt: they are system trust
+  # infrastructure, and we need them before brew is even a question.
+  apt_install curl gnupg ca-certificates apt-transport-https
+  apt_install_unless_brew vim git
+}
+
+install_telegram() {
+  [ "${SKIP_TELEGRAM:-0}" = "1" ] && { warn "skipping Telegram (SKIP_TELEGRAM=1)"; return 0; }
+  step "Telegram Desktop (Ubuntu archive)"
+  # telegram-desktop is in the 'universe' component. On a stock Ubuntu desktop
+  # universe is enabled; on some minimal/cloud images it is not.
+  if ! apt-cache policy telegram-desktop 2>/dev/null | grep -q 'Candidate: [^(]'; then
+    warn "telegram-desktop not available. Enabling the 'universe' component."
+    if have add-apt-repository; then
+      sudo add-apt-repository -y universe || warn "could not enable universe"
+      apt_refresh_needed
+      apt_update_once
+    else
+      warn "add-apt-repository missing; install software-properties-common and re-run."
+      return 0
+    fi
+  fi
+  apt_install telegram-desktop
+}
+
+install_signal() {
+  [ "${SKIP_SIGNAL:-0}" = "1" ] && { warn "skipping Signal (SKIP_SIGNAL=1)"; return 0; }
+  step "Signal Desktop (official Signal apt repository)"
+
+  # Signal publishes amd64 only. On arm64 there is no official build, and the
+  # community ones are exactly the sort of third-party binary this script exists
+  # to avoid. Say so plainly rather than installing something unofficial.
+  local arch; arch="$(dpkg --print-architecture)"
+  if [ "$arch" != "amd64" ]; then
+    warn "Signal ships official Linux builds for amd64 only (this box is $arch)."
+    warn "Skipping. Use Signal on your phone, or a browser-based bridge."
+    return 0
+  fi
+
+  install_keyring \
+    "https://updates.signal.org/desktop/apt/keys.asc" \
+    "/usr/share/keyrings/signal-desktop-keyring.gpg" \
+    "$SIGNAL_FPR" \
+    --dearmor
+
+  # Written literally rather than curl'd from updates.signal.org so the
+  # repository definition is auditable in git and cannot change under us.
+  # Suite is 'xenial' — that is Signal's own channel name, not an Ubuntu
+  # release constraint; it serves current builds to all supported releases.
+  write_apt_source /etc/apt/sources.list.d/signal-desktop.sources \
+"Types: deb
+URIs: https://updates.signal.org/desktop/apt
+Suites: xenial
+Components: main
+Architectures: amd64
+Signed-By: /usr/share/keyrings/signal-desktop-keyring.gpg"
+
+  apt_update_once
+  apt_install signal-desktop
+}
+
+install_github_cli() {
+  [ "${SKIP_GH:-0}" = "1" ] && { warn "skipping GitHub CLI (SKIP_GH=1)"; return 0; }
+  step "GitHub CLI (official GitHub apt repository)"
+
+  local arch; arch="$(dpkg --print-architecture)"
+  case "$arch" in
+    amd64|arm64|armhf) : ;;
+    *) warn "GitHub CLI publishes amd64/arm64/armhf only (this box is $arch). Skipping."; return 0 ;;
+  esac
+
+  # Ubuntu's own archive carries 'gh', but it lags upstream badly on LTS. The
+  # official repo is the same trust model as the others here: vendor-run,
+  # GPG-signed, apt-managed.
+  install_keyring \
+    "https://cli.github.com/packages/githubcli-archive-keyring.gpg" \
+    "/usr/share/keyrings/githubcli-archive-keyring.gpg" \
+    "$GH_FPR"
+
+  write_apt_source /etc/apt/sources.list.d/github-cli.list \
+"deb [arch=$arch signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main"
+
+  apt_update_once
+  apt_install_unless_brew gh
+}
+
+install_claude_code() {
+  step "Claude Code (official Anthropic native installer)"
+  if have claude; then
+    ok "claude already installed ($(claude --version 2>/dev/null || echo 'version unknown'))"
+    ensure_local_bin_on_path
+    return 0
+  fi
+  # The native installer places a launcher at ~/.local/bin/claude and keeps
+  # versions under ~/.local/share/claude. It self-updates in the background.
+  # npm is deliberately not used: it would pull in a Node toolchain we do not
+  # otherwise need, and the native binary is the documented path.
+  curl -fsSL --proto '=https' --tlsv1.2 https://claude.ai/install.sh | bash \
+    || die "Claude Code installer failed."
+  ensure_local_bin_on_path
+  if have claude; then
+    ok "Claude Code installed: $(claude --version 2>/dev/null || echo 'installed')"
+  else
+    warn "claude not on PATH yet — open a new shell, or: export PATH=\"\$HOME/.local/bin:\$PATH\""
+  fi
+}
+
+install_claude_desktop() {
+  [ "${SKIP_DESKTOP:-0}" = "1" ] && { warn "skipping Claude Desktop (SKIP_DESKTOP=1)"; return 0; }
+  step "Claude Desktop (official Anthropic apt repository, Linux beta)"
+
+  local arch; arch="$(dpkg --print-architecture)"
+  case "$arch" in
+    amd64|arm64) : ;;
+    *) warn "Claude Desktop publishes amd64 and arm64 only (this box is $arch). Skipping."; return 0 ;;
+  esac
+
+  install_keyring \
+    "https://downloads.claude.ai/claude-desktop/key.asc" \
+    "/usr/share/keyrings/claude-desktop-archive-keyring.asc" \
+    "$ANTHROPIC_FPR"
+
+  write_apt_source /etc/apt/sources.list.d/claude-desktop.list \
+"deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/claude-desktop-archive-keyring.asc] https://downloads.claude.ai/claude-desktop/apt/stable stable main"
+
+  apt_update_once
+  apt_install claude-desktop
+}
+
+setup_whatsapp_browser() {
+  step "WhatsApp (browser)"
+  # No package, no wrapper, no extra daemon. WhatsApp Web in the browser you
+  # already trust and already patch. See WHATSAPP_ALTERNATIVES.md.
+  ok "use $WHATSAPP_URL in your browser"
+  ok "no client installed by design — see WHATSAPP_ALTERNATIVES.md for native options"
+}
+
+summary() {
+  cat <<EOF
+
+${C_GREEN}────────────────────────────────────────────────────────$C_RESET
+$C_GREEN Provisioning complete$C_RESET
+${C_GREEN}────────────────────────────────────────────────────────$C_RESET
+
+  vim              $(have vim && echo 'installed' || echo 'MISSING')
+  telegram         $(have telegram-desktop && echo 'installed' || echo 'not installed')
+  signal           $(have signal-desktop && echo 'installed' || echo 'not installed')
+  gh (github cli)  $(have gh && echo 'installed' || echo 'not installed')
+  claude (code)    $(have claude && echo 'installed' || echo 'not installed')
+  claude-desktop   $(have claude-desktop && echo 'installed' || echo 'not installed')
+  whatsapp         browser — $WHATSAPP_URL
+
+Next steps:
+  1. Open a new shell (or: source ~/.bashrc) so ~/.local/bin is on PATH.
+  2. Run 'claude' and sign in.
+  3. Launch Claude Desktop from your app launcher, or run 'claude-desktop'.
+
+Updates:
+  Signal, Telegram, Claude Desktop  ->  sudo apt update && sudo apt upgrade
+  Claude Code                       ->  self-updates; force with 'claude update'
+
+EOF
+}
+
+main() {
+  step "Ubuntu provisioning — official sources only, no snaps"
+  require_not_root
+  require_ubuntu
+  require_sudo
+  require_tools
+  note_brew
+
+  install_base
+  install_telegram
+  install_signal
+  install_github_cli
+  install_claude_code
+  install_claude_desktop
+  setup_whatsapp_browser
+
+  summary
+}
+
+main "$@"

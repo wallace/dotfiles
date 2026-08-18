@@ -26,6 +26,23 @@ $ brew bundle # installs all things listed in Brewfile
 $ # Note: reattach-to-user-namespace and ical-buddy are macOS-only and will be skipped
 ```
 
+#### Ubuntu desktop provisioning
+
+For a fresh Ubuntu box that also needs desktop apps (vim, Telegram, Signal,
+GitHub CLI, Claude Code, Claude Desktop), see [ubuntu/](ubuntu/):
+
+```
+$ ./ubuntu/provision.sh              # interactive
+$ ./ubuntu/provision-minimal.sh      # non-interactive, curl|bash-safe
+```
+
+Everything installs from official, GPG-signed vendor repositories with keys
+pinned by fingerprint — no snaps. The scripts detect Homebrew and skip the apt
+copy of anything your Brewfile already provides. See
+[ubuntu/DOTFILES_README.md](ubuntu/DOTFILES_README.md) for the security
+rationale and [ubuntu/WHATSAPP_ALTERNATIVES.md](ubuntu/WHATSAPP_ALTERNATIVES.md)
+for the WhatsApp situation.
+
 #### Windows (Native)
 
 For native Windows usage (not WSL), you can use the git configuration directly.
