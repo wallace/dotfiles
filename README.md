@@ -45,13 +45,22 @@ $ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/
 $ eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"   # needed now; .zshrc handles it later
 $ cd ~/dotfiles && brew bundle
 $
-$ # 3. oh-my-zsh (required by .zshrc)
-$ sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended --keep-zshrc
+$ # 3. oh-my-zsh (required by .zshrc). CHSH/RUNZSH as env vars, not just
+$ #    --unattended: the flag only reaches the script through that empty ""
+$ #    positional, and it prompts to change your shell if it gets dropped.
+$ #    Step 8 changes the shell instead.
+$ CHSH=no RUNZSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended --keep-zshrc
 $
-$ # 4. pure prompt (required by .zshrc)
-$ git clone https://github.com/sindresorhus/pure.git ~/.zsh/pure
+$ # 4. pure prompt — ONLY if you skipped Homebrew. `brew bundle` already
+$ #    installs pure, and .zshrc finds it via brew's site-functions.
+$ #    .zshrc checks both locations, so either works.
+$ [ -d /home/linuxbrew/.linuxbrew/share/zsh/site-functions ] || \
+    git clone https://github.com/sindresorhus/pure.git ~/.zsh/pure
 $
-$ # 5. clear the way — stow refuses to clobber a real file
+$ # 5. clear the way — stow refuses to clobber a real file.
+$ #    Alternative: `stow --adopt zsh` pulls the existing file INTO the repo
+$ #    and symlinks to it. Handy, but it overwrites the repo's tracked copy,
+$ #    so run `git diff` right after and `git checkout zsh/` if it ate yours.
 $ mv ~/.zshrc ~/.zshrc.bak 2>/dev/null; rm -f ~/.zshrc
 $
 $ # 6. stow the cross-platform packages (see Steps below for the macOS-only ones)
@@ -77,6 +86,16 @@ $ stow -n -v -t ~ zsh
 ```
 
 Back up whatever it names, remove it, and re-run.
+
+`stow --adopt <package>` is the quicker route: it moves the conflicting file
+into the repo and symlinks to it. Note the direction — the file on disk
+**replaces** the repo's tracked copy, so a stray default `.zshrc` can silently
+overwrite yours. Always follow it with:
+
+```
+$ git -C ~/dotfiles diff        # see what adopt pulled in
+$ git -C ~/dotfiles checkout zsh/   # undo if it overwrote the good copy
+```
 
 #### Ubuntu desktop provisioning
 
