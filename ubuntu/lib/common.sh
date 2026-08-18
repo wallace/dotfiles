@@ -30,6 +30,10 @@ readonly SIGNAL_FPR="DBA36B5181D0C816F630E889D980A17457F6FB06"
 # pinned, so the rollover does not break the install and does not tempt anyone
 # into re-pinning in a hurry. A third, unexpected key still fails the check.
 readonly GH_FPR="2C6106201985B60E6C7AC87323F3D4EA75716059 7F38BBB59D064DBCB3D84D725612B36462313325"
+# 1Password: https://support.1password.com/install-linux/#debian-or-ubuntu
+# The low 64 bits of this fingerprint (AC2D62742012EA22) are also the debsig
+# "origin id", i.e. the directory name dpkg looks under to verify the .deb.
+readonly ONEPASSWORD_FPR="3FEF9748469ADBE15DA7CA80AC2D62742012EA22"
 
 # --- Output ----------------------------------------------------------------
 
@@ -267,6 +271,22 @@ write_apt_source() {
   sudo chmod 0644 "$dest"
   apt_refresh_needed
   ok "registered apt source: $dest"
+}
+
+
+# Write a root-owned config file only when its content differs. Unlike
+# write_apt_source this does not invalidate the package lists, so it is safe
+# for files apt does not read.
+write_system_file() {
+  local dest="$1" content="$2" mode="${3:-0644}"
+  if [ -f "$dest" ] && [ "$(sudo cat "$dest" 2>/dev/null)" = "$content" ]; then
+    ok "already current: $dest"
+    return 0
+  fi
+  sudo install -d -m 0755 "$(dirname "$dest")"
+  printf '%s\n' "$content" | sudo tee "$dest" >/dev/null || die "could not write $dest"
+  sudo chmod "$mode" "$dest"
+  ok "wrote $dest"
 }
 
 

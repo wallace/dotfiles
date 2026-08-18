@@ -19,6 +19,7 @@
 # Environment overrides:
 #   SKIP_DESKTOP=1   skip Claude Desktop (headless/server boxes)
 #   SKIP_SIGNAL=1    skip Signal
+#   SKIP_1PASSWORD=1 skip 1Password
 #   SKIP_TELEGRAM=1  skip Telegram
 
 set -euo pipefail
@@ -39,6 +40,8 @@ else
   # pinned so the rollover does not break the install; a third, unexpected key
   # still fails the check.
   readonly GH_FPR="2C6106201985B60E6C7AC87323F3D4EA75716059 7F38BBB59D064DBCB3D84D725612B36462313325"
+  # Low 64 bits (AC2D62742012EA22) double as 1Password's debsig origin id.
+  readonly ONEPASSWORD_FPR="3FEF9748469ADBE15DA7CA80AC2D62742012EA22"
   if [ -t 1 ]; then
     readonly C_RESET=$'\033[0m' C_BLUE=$'\033[1;34m' C_GREEN=$'\033[1;32m'
     readonly C_YELLOW=$'\033[1;33m' C_RED=$'\033[1;31m'
@@ -176,6 +179,16 @@ else
     sudo chmod 0644 "$dest"
     ok "verified and installed signing key: $dest"
     for f in "${got[@]}"; do ok "  pinned fingerprint $f"; done
+  }
+  write_system_file() {
+    local dest="$1" content="$2" mode="${3:-0644}"
+    if [ -f "$dest" ] && [ "$(sudo cat "$dest" 2>/dev/null)" = "$content" ]; then
+      ok "already current: $dest"; return 0
+    fi
+    sudo install -d -m 0755 "$(dirname "$dest")"
+    printf '%s\n' "$content" | sudo tee "$dest" >/dev/null || die "could not write $dest"
+    sudo chmod "$mode" "$dest"
+    ok "wrote $dest"
   }
   write_apt_source() {
     local dest="$1" content="$2"
@@ -334,6 +347,51 @@ Signed-By: /usr/share/keyrings/signal-desktop-keyring.gpg"
   apt_install_optional signal-desktop || warn "retry later: sudo apt install signal-desktop"
 }
 
+install_1password() {
+  [ "${SKIP_1PASSWORD:-0}" = "1" ] && { warn "skipping 1Password (SKIP_1PASSWORD=1)"; return 0; }
+  step "1Password (official 1Password apt repository)"
+  local arch; arch="$(dpkg --print-architecture)"
+  case "$arch" in
+    amd64|arm64) : ;;
+    *) warn "1Password publishes amd64 and arm64 only (this box is $arch). Skipping."; return 0 ;;
+  esac
+
+  install_keyring \
+    "https://downloads.1password.com/linux/keys/1password.asc" \
+    "/usr/share/keyrings/1password-archive-keyring.gpg" \
+    "$ONEPASSWORD_FPR" \
+    --dearmor
+
+  write_apt_source /etc/apt/sources.list.d/1password.list \
+"deb [arch=$arch signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/$arch stable main"
+
+  # 1Password signs the .deb itself, not just the repository index. debsig
+  # identifies the origin by the low 64 bits of the fingerprint and uses it as
+  # the directory name under both trees below.
+  local keyid="${ONEPASSWORD_FPR: -16}"
+  install_keyring \
+    "https://downloads.1password.com/linux/keys/1password.asc" \
+    "/usr/share/debsig/keyrings/$keyid/debsig.gpg" \
+    "$ONEPASSWORD_FPR" \
+    --dearmor
+  write_system_file "/etc/debsig/policies/$keyid/1password.pol" \
+"<?xml version=\"1.0\"?>
+<!DOCTYPE Policy SYSTEM \"https://www.debian.org/debsig/1.0/policy.dtd\">
+<Policy xmlns=\"https://www.debian.org/debsig/1.0/\">
+    <Origin Name=\"1Password\" id=\"$keyid\" Description=\"Password manager and secure wallet\"/>
+    <Selection>
+        <Required Type=\"origin\" File=\"debsig.gpg\" id=\"$keyid\"/>
+    </Selection>
+    <Verification MinOptional=\"0\">
+        <Required Type=\"origin\" File=\"debsig.gpg\" id=\"$keyid\"/>
+    </Verification>
+</Policy>"
+
+  apt_update_once
+  apt_install_optional 1password || warn "retry later: sudo apt install 1password"
+  apt_install_optional 1password-cli || warn "retry later: sudo apt install 1password-cli"
+}
+
 install_github_cli() {
   [ "${SKIP_GH:-0}" = "1" ] && { warn "skipping GitHub CLI (SKIP_GH=1)"; return 0; }
   step "GitHub CLI (official GitHub apt repository)"
@@ -420,6 +478,7 @@ ${C_GREEN}───────────────────────�
   vim              $(have vim && echo 'installed' || echo 'MISSING')
   telegram         $(have telegram-desktop && echo 'installed' || echo "browser — $TELEGRAM_URL")
   signal           $(have signal-desktop && echo 'installed' || echo 'not installed')
+  1password        $(have 1password && echo 'installed' || echo 'not installed')
   gh (github cli)  $(have gh && echo 'installed' || echo 'not installed')
   claude (code)    $(have claude && echo 'installed' || echo 'not installed')
   claude-desktop   $(have claude-desktop && echo 'installed' || echo 'not installed')
@@ -448,6 +507,7 @@ main() {
   install_base
   install_telegram
   install_signal
+  install_1password
   install_github_cli
   install_claude_code
   install_claude_desktop
