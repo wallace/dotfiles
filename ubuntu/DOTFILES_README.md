@@ -41,6 +41,7 @@ Read the script before you pipe it into a shell. That goes for this one too.
 ubuntu/
 ├── provision-minimal.sh      # non-interactive; safe for curl | bash
 ├── provision.sh              # interactive; prompts for WhatsApp
+├── harden-ssh.sh             # opt-in: sshd + ufw + fail2ban
 ├── lib/
 │   └── common.sh             # shared helpers, pinned key fingerprints
 ├── DOTFILES_README.md        # this file
@@ -51,6 +52,55 @@ ubuntu/
 from curl, where a sibling file wouldn't exist. When run from a clone it sources
 the real library instead. Changes to the security-critical helpers must be made
 in **both** places.
+
+## Remote access (`harden-ssh.sh`)
+
+Deliberately **not** part of `provision.sh`. That script sets up a workstation;
+this one opens a listening port and turns on a firewall. A firewall switching on
+as a side effect of installing Signal is how people lock themselves out of
+machines they aren't sitting in front of.
+
+```bash
+./harden-ssh.sh                                  # keys only, SSH open to any source
+SSH_ALLOW_FROM=192.168.1.0/24 ./harden-ssh.sh    # LAN only — the strongest option here
+SSH_PASSWORD_AUTH=yes ./harden-ssh.sh            # also accept passwords
+SSH_PORT=2222 ./harden-ssh.sh                    # non-default port
+```
+
+| Setting | Default | Notes |
+|---|---|---|
+| `PasswordAuthentication` | `no` | Keys always work. Passwords are opt-in because a reachable box with them enabled is guessed at continuously. |
+| `PermitRootLogin` | `no` | Log in as yourself, then `sudo`. |
+| ufw inbound | deny | The SSH allow rule is written *before* the policy flips — the reverse order is the classic way to lose a remote box. |
+| fail2ban `sshd` | 5 tries / 10 min → 1 h | Ban time multiplies on repeat offences, up to a week. |
+
+Four things this script handles that a hand-rolled version usually doesn't:
+
+- **Lockout by empty `authorized_keys`.** With passwords off, `authorized_keys`
+  is the only way in — and on a fresh box it's empty. The script counts real
+  keys in it before changing anything, and refuses to proceed with no terminal
+  to confirm on. It also fixes the `StrictModes` permission trap: `sshd` ignores
+  `authorized_keys` outright if `~`, `~/.ssh`, or the file is group-writable,
+  and the only symptom is `Permission denied (publickey)` with a valid key.
+- **The silent fail2ban failure.** The stock `sshd` jail reads `/var/log/auth.log`.
+  Ubuntu server and cloud images from 24.04 on ship without `rsyslog`, so that
+  file never appears — the jail starts cleanly, reports green, and bans nobody.
+  The script picks the `systemd` journal backend when `auth.log` is absent.
+- **Drop-in precedence.** `sshd` takes the *first* value it sees for a keyword,
+  and among `sshd_config.d/*.conf` the lowest filename wins. A `50-cloud-init.conf`
+  setting `PasswordAuthentication no` silently beats a later drop-in. The script
+  names any conflicting file, then re-reads the *effective* config with `sshd -T`
+  and warns if what you asked for is not what won.
+- **Lockout refusal.** If it's running over SSH and `SSH_ALLOW_FROM` might not
+  contain the current client, it stops and asks — and with no terminal to ask
+  on, it aborts rather than guessing.
+
+Socket activation is handled too: on Ubuntu 22.10+ `ssh` is socket-activated, so
+restarting `ssh.service` alone leaves the old port bound.
+
+After it finishes, **open a second terminal and confirm you can still get in**
+before closing the first. A broken SSH config only becomes obvious once the last
+session ends.
 
 ## Security principles
 

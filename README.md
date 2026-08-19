@@ -96,6 +96,15 @@ copy of anything your Brewfile already provides. See
 rationale and [ubuntu/WHATSAPP_ALTERNATIVES.md](ubuntu/WHATSAPP_ALTERNATIVES.md)
 for the WhatsApp situation.
 
+Remote access is a separate, opt-in script — a firewall shouldn't switch on as a
+side effect of installing desktop apps:
+
+```
+$ ./ubuntu/harden-ssh.sh                                  # sshd + ufw + fail2ban, keys only
+$ SSH_ALLOW_FROM=192.168.1.0/24 ./ubuntu/harden-ssh.sh    # reachable from the LAN only
+$ SSH_PASSWORD_AUTH=yes ./ubuntu/harden-ssh.sh            # also accept passwords
+```
+
 #### Windows (Native)
 
 For native Windows usage (not WSL), you can use the git configuration directly.
