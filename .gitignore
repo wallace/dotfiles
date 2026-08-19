@@ -30,6 +30,7 @@ ssh/.ssh/*
 !ssh/.ssh/config
 !ssh/.ssh/config-linux
 !ssh/.ssh/config-macos
+!ssh/.ssh/allowed_signers
 
 id_rsa
 id_ed25519
