@@ -178,6 +178,7 @@ $ rm ~/.zshrc
 $ stow zsh
 $ stow bash
 $ stow git
+$ stow ssh
 $ stow vim
 $ stow nvim
 $ stow tmux
@@ -195,6 +196,36 @@ $ stow rbenv
 $ stow obsidian
 $ stow kitty
 $ stow lein
+```
+
+The `ssh` package carries the client config, and splits per-OS the same way
+`git` does — `~/.ssh/config-linux` for phoenix, `~/.ssh/config-macos` for the
+work laptop, selected at connect time. The split exists because 1Password's
+SSH agent socket lives at a different path on each:
+
+| | Agent socket |
+| --- | --- |
+| Linux (phoenix) | `~/.1password/agent.sock` |
+| macOS (work laptop) | `~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock` |
+
+Two rules govern edits to it, both the opposite of what you'd assume:
+
+- **First value wins.** `ssh_config` keeps the *first* value it sees for a
+  keyword and ignores every later one, so the includes sit at the top and the
+  shared `Host *` defaults at the bottom. Adding a setting *below* an existing
+  one silently does nothing.
+- **`Match` gates application, not parsing.** A file included inside a `Match`
+  block whose predicate is false is still read and syntax-checked, and one
+  unknown keyword is fatal — `ssh` then refuses to run for *every* host. So a
+  macOS-only keyword like `UseKeychain` cannot go in a tracked file even inside
+  a `Darwin` block, because the same file is stowed onto Linux. Platform-only
+  settings belong in `~/.dotoverrides/ssh/*.conf`, which is untracked, included
+  first, and therefore wins.
+
+Verify a change without connecting anywhere:
+
+```
+$ ssh -G github.com | grep -iE 'identityagent|hashknownhosts'
 ```
 
 #### macOS-only packages
