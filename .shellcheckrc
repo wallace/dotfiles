@@ -1,0 +1,11 @@
+# Resolve `# shellcheck source=...` directives relative to the script being
+# checked, rather than to the current working directory.
+#
+# Without this, the same file passes or fails depending on where you stand:
+#
+#   cd ubuntu && shellcheck -x provision.sh    # clean
+#   shellcheck -x ubuntu/provision.sh          # SC1091, looks for ./lib/common.sh
+#
+# The scripts in ubuntu/ source lib/common.sh by a path relative to themselves,
+# so SCRIPTDIR is the resolution that matches how they actually run.
+source-path=SCRIPTDIR
