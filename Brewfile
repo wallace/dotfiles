@@ -23,15 +23,25 @@ brew "neovim"
 # github sql primer
 brew "git-lfs"
 
-# for setting up emails from google locally
+# Mail: neomutt reads a local Maildir that isync (mbsync) fills from Gmail,
+# notmuch indexes, and msmtp sends through. w3m renders HTML mail via
+# ~/.mutt/mailcap; libsecret provides secret-tool, which holds the Gmail App
+# Password that both mbsync and msmtp read.
 brew "neomutt"
 brew "urlview"
+brew "w3m"
+brew "libsecret"
 brew "notmuch"
-brew "offlineimap"
+brew "isync"
 brew "msmtp"
 
 # macOS only (no Linux bottles available)
 if OS.mac?
+  # GUI apps. On Ubuntu these come from ubuntu/provision.sh instead: Dropbox
+  # from its signed apt repo, Obsidian from Obsidian's own .deb, since casks
+  # are macOS-only and Linuxbrew has neither.
+  cask "dropbox"
+  cask "obsidian"
   # Required for tmux copy/paste on macOS
   brew "reattach-to-user-namespace"
   # https://github.com/zerowidth/zoom-calendar.alfredworkflow

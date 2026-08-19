@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+#
+# mailsync
+#
+# Fetch mail with mbsync, then refresh the notmuch index.
+#
+# offlineimap had a `postsynchook` setting that ran `notmuch new` for us.
+# mbsync has no equivalent hook, so the two halves are stitched together here
+# instead. Anything that used to run `offlineimap` should run this.
+#
+# With no arguments it syncs the whole `gmail` group. Pass a channel to narrow
+# it — `mailsync gmail-inbox` is the fast path, and the one bound to `o` in
+# .muttrc. The cold sync of gmail-archive is the entire account history, so
+# prefer the inbox channel for routine checks.
+
+set -euo pipefail
+
+# `|| rc=$?` rather than a bare call: under `set -e` a non-zero mbsync would
+# abort the script and skip indexing entirely. That is the wrong failure mode.
+# A sync that dies partway -- dropped network, Ctrl-C, or the per-mailbox lock
+# when a second sync is already running -- still leaves fetched messages on
+# disk, and skipping notmuch would leave them invisible to search until the
+# next fully successful run. Stale search results are silent; a non-zero exit
+# is not.
+mbsync "${@:-gmail}" || rc=$?
+
+# Runs even for a single-channel sync: notmuch only indexes what changed, so
+# it is cheap, and skipping it would leave the index stale.
+notmuch new
+
+# Propagate mbsync's status, so callers and the neomutt macros still see the
+# failure even though indexing went ahead.
+exit "${rc:-0}"

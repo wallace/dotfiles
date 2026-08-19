@@ -82,7 +82,8 @@ Back up whatever it names, remove it, and re-run.
 #### Ubuntu desktop provisioning
 
 For a fresh Ubuntu box that also needs desktop apps (vim, Telegram, Signal,
-GitHub CLI, Claude Code, Claude Desktop), see [ubuntu/](ubuntu/):
+1Password, GitHub CLI, Claude Code, Claude Desktop, Dropbox, Obsidian), see
+[ubuntu/](ubuntu/):
 
 ```
 $ ./ubuntu/provision.sh              # interactive
@@ -96,8 +97,16 @@ Bluetooth keyboards pick it up along with everything else. Set `SKIP_KEYBOARD=1`
 to opt out.
 
 Everything installs from official, GPG-signed vendor repositories with keys
-pinned by fingerprint — no snaps. The scripts detect Homebrew and skip the apt
-copy of anything your Brewfile already provides. See
+pinned by fingerprint — no snaps. The one exception is **Obsidian**, which runs
+no apt repo and publishes no signatures or checksums at all; its `.deb` comes
+from Obsidian's own GitHub releases, so apt will never update it and re-running
+the script is how you upgrade. **Dropbox** is a normal signed repo, but note
+that its apt package is only the launcher — `dropbox start -i` fetches the
+proprietary daemon, so the scripts also install `python3-gpg`, without which
+that download's signature goes unverified.
+
+The scripts detect Homebrew and skip the apt copy of anything your Brewfile
+already provides. See
 [ubuntu/DOTFILES_README.md](ubuntu/DOTFILES_README.md) for the security
 rationale and [ubuntu/WHATSAPP_ALTERNATIVES.md](ubuntu/WHATSAPP_ALTERNATIVES.md)
 for the WhatsApp situation.
@@ -245,20 +254,17 @@ skip them on Linux:
 | `launchagents` | `~/Library/LaunchAgents` — launchd is macOS |
 | `chime` | launchd agent plus a Swift CoreAudio helper |
 | `voice-pipeline` | MacWhisper, `osascript`, and Keychain lookups |
-| `offlineimap` | reads passwords from `~/Library/Keychains` via `/usr/bin/security` |
-| `msmtp` | `tls_trust_file` points at a macOS Homebrew cert path |
-| `mutt`, `notmuch` | portable themselves, but only useful with the two above |
 
 ```
 $ stow hammerspoon
 $ stow launchagents
 $ stow chime
 $ stow voice-pipeline
-$ stow mutt
-$ stow notmuch
-$ stow offlineimap
-$ stow msmtp
 ```
+
+The mail packages (`mutt`, `msmtp`, `notmuch`, `isync`) used to live in this
+list because they read the macOS Keychain and hard-coded Homebrew cert paths.
+They are Linux-native now — see [Mail](#mail-neomutt--gmail) below.
 
 `powershell` is Windows-only (`Documents/PowerShell`) — see the Windows
 section above.
@@ -304,6 +310,76 @@ The launcher reads all machine/vault paths from environment variables, so no hom
 is hardcoded.
 
 ## Platform Notes
+
+### Mail (neomutt + Gmail)
+
+neomutt reads a local Maildir rather than talking to Gmail directly. `mbsync`
+(from isync) fills that Maildir over IMAP, `notmuch` indexes it, `msmtp` sends,
+and `w3m` renders HTML mail through `~/.mutt/mailcap`:
+
+```
+Gmail --IMAP--> mbsync --> ~/.mail --> notmuch --> neomutt --msmtp--> Gmail
+```
+
+This replaced offlineimap, which is a Python app in low-maintenance mode and a
+poor bet against Python 3.14. isync is C, actively maintained, and reads the
+password straight from the keyring with no helper script in between.
+
+Setup, once per machine:
+
+1. **Create an App Password.** Gmail rejects a plain account password over
+   IMAP. Turn on 2-Step Verification, then generate one at
+   <https://myaccount.google.com/apppasswords>. Google does *not* offer App
+   Passwords on work/school accounts — a Workspace address needs OAuth2, which
+   this config does not currently do.
+
+2. **Store it in the login keyring.** Both `.mbsyncrc` and `.msmtprc` read this
+   single entry, so the secret never lands on disk:
+
+   ```
+   $ secret-tool store --label='Gmail (mbsync)' \
+       account jonathan.wallace@gmail.com server imap.gmail.com
+   ```
+
+3. **Stow, and create the Maildir root** — mbsync creates the folders beneath
+   it but not the directory itself:
+
+   ```
+   $ cd ~/dotfiles && stow -t ~ mutt msmtp notmuch isync scripts
+   $ mkdir -p ~/.mail/jonathanwallace-gmail.com
+   ```
+
+4. **Verify auth before syncing anything.** This lists folders without
+   transferring mail:
+
+   ```
+   $ mbsync -l gmail-inbox
+   ```
+
+5. **First sync — inbox first.** The `gmail-archive` channel maps to
+   `[Gmail]/All Mail`, which is the entire account history; its cold sync is
+   long:
+
+   ```
+   $ mailsync gmail-inbox
+   $ mailsync                 # the whole `gmail` group, when you're ready
+   ```
+
+Day to day, `O` in neomutt syncs everything and `o` syncs only the inbox. Both
+call `mailsync`, which runs `notmuch new` afterwards — mbsync has no equivalent
+of offlineimap's `postsynchook`, so the wrapper supplies it.
+
+**Deletion semantics differ per folder, deliberately.** INBOX, sent, and drafts
+use `Expunge Both`: in Gmail's IMAP model an expunge from INBOX merely removes
+the Inbox label, so the message survives in All Mail — that is an archive, not
+a delete. The `flagged` and `archive` channels use `Expunge Near`, because an
+expunge in Starred or All Mail *is* a permanent Gmail delete. Local deletions
+there stay local. This is the equivalent of offlineimap's `realdelete=no`.
+
+Editing `.mbsyncrc` has one sharp edge: **a blank line ends a section.**
+Comments inside a section are fine, but separate keywords with a blank line and
+everything after it parses as a global, failing with "not a recognized
+section-starting or global keyword".
 
 ### macOS-only packages
 

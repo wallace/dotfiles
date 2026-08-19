@@ -1,0 +1,92 @@
+# Gmail -> local Maildir. notmuch indexes the result and neomutt reads it.
+#
+# Replaces the offlineimap setup this repo used to carry. offlineimap is a
+# Python app in low-maintenance mode and the box now runs Python 3.14; isync is
+# C, still maintained, and reads the password straight out of the login keyring
+# with no helper script in between.
+#
+# CAUTION when editing: a blank line ends a section in this format. Comments
+# are fine inside a section, blank lines are not -- separate them with a blank
+# line and every keyword after it is parsed as a global instead, which fails
+# with "not a recognized section-starting or global keyword".
+#
+# The password is a Gmail App Password from myaccount.google.com/apppasswords
+# (which requires 2-Step Verification -- Gmail rejects the plain account
+# password over IMAP). It lives in the login keyring, not on disk:
+#
+#   secret-tool store --label='Gmail (mbsync)' \
+#       account jonathan.wallace@gmail.com server imap.gmail.com
+#
+# The keyring unlocks with the session at login, so unattended syncs work.
+IMAPAccount gmail
+Host imap.gmail.com
+Port 993
+User jonathan.wallace@gmail.com
+PassCmd "secret-tool lookup account jonathan.wallace@gmail.com server imap.gmail.com"
+TLSType IMAPS
+CertificateFile /etc/ssl/certs/ca-certificates.crt
+
+IMAPStore gmail-remote
+Account gmail
+
+# Trailing slash on Path is required -- without it mbsync treats the value as
+# a file prefix rather than a directory.
+MaildirStore gmail-local
+Path ~/.mail/jonathanwallace-gmail.com/
+Inbox ~/.mail/jonathanwallace-gmail.com/INBOX
+SubFolders Verbatim
+
+# One channel per folder rather than a Patterns glob, so the local names stay
+# clean. A glob would create directories literally called "[Gmail]/Sent Mail",
+# and .muttrc's `mailboxes` lines expect sent/drafts/archive/flagged.
+#
+# Expunge Both is safe here: in Gmail's IMAP model expunging from INBOX only
+# removes the Inbox label, and the message survives in All Mail. That is
+# exactly "archive".
+Channel gmail-inbox
+Far :gmail-remote:"INBOX"
+Near :gmail-local:INBOX
+Create Both
+SyncState *
+Expunge Both
+
+Channel gmail-sent
+Far :gmail-remote:"[Gmail]/Sent Mail"
+Near :gmail-local:sent
+Create Both
+SyncState *
+Expunge Both
+
+Channel gmail-drafts
+Far :gmail-remote:"[Gmail]/Drafts"
+Near :gmail-local:drafts
+Create Both
+SyncState *
+Expunge Both
+
+# Near only for the two below. Starred and All Mail are the folders where an
+# expunge is a real, permanent Gmail delete rather than an unlabel, so local
+# deletions stay local. Equivalent to offlineimap's realdelete=no.
+Channel gmail-flagged
+Far :gmail-remote:"[Gmail]/Starred"
+Near :gmail-local:flagged
+Create Both
+SyncState *
+Expunge Near
+
+Channel gmail-archive
+Far :gmail-remote:"[Gmail]/All Mail"
+Near :gmail-local:archive
+Create Both
+SyncState *
+Expunge Near
+
+# `mbsync gmail` does everything; `mbsync gmail-inbox` does just the inbox.
+# Sync the inbox first -- All Mail is the entire account history and the cold
+# sync is long.
+Group gmail
+Channel gmail-inbox
+Channel gmail-sent
+Channel gmail-drafts
+Channel gmail-flagged
+Channel gmail-archive

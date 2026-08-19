@@ -1,0 +1,17 @@
+# Referenced by `set mailcap_path` in .muttrc. This file did not exist before —
+# without it neomutt has no way to render HTML mail, which is most of Gmail,
+# and every such message shows up as an unviewable attachment.
+
+# Inline rendering, used by `auto_view text/html` in .muttrc. copiousoutput
+# tells neomutt to pipe the part through and show the result in the pager.
+text/html; w3m -dump -I %{charset} -O utf-8 -T text/html; copiousoutput; nametemplate=%s.html
+
+# Anything else hands off to the desktop. view_attachment.sh copies the part
+# somewhere durable first, because neomutt deletes its temp file as soon as
+# the viewer is launched.
+image/*; ~/.mutt/view_attachment.sh %s
+application/pdf; ~/.mutt/view_attachment.sh %s
+application/msword; ~/.mutt/view_attachment.sh %s
+application/vnd.openxmlformats-officedocument.wordprocessingml.document; ~/.mutt/view_attachment.sh %s
+application/vnd.ms-excel; ~/.mutt/view_attachment.sh %s
+application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; ~/.mutt/view_attachment.sh %s
