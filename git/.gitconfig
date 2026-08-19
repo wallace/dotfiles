@@ -1,6 +1,9 @@
 [user]
 	name = Jonathan R. Wallace
 	email = jonathan.wallace@gmail.com
+	# signingkey lives in .gitconfig-{linux,macos,windows}: each machine signs
+	# with its own key. It must be set there, not here, because those files are
+	# included further down and git config is last-wins.
 [color]
 	diff = auto
 	status = auto
@@ -98,3 +101,26 @@
 	trustExitCode = false
 [difftool "p4mergetool"]
 	cmd = /Applications/p4merge.app/Contents/Resources/launchp4merge $LOCAL $REMOTE
+# --- Commit signing -------------------------------------------------------
+#
+# Signing runs through 1Password's SSH agent, so the private key stays in the
+# vault and each signature is approved there.
+#
+# ORDER MATTERS, and it is the opposite of ssh_config: git config takes the
+# LAST value it sees, and the includeIf lines above pull in the per-OS file.
+# So anything a per-OS file needs to override must NOT be repeated below this
+# point — it would win over the include. That is why 'program' and
+# 'signingkey' appear only in .gitconfig-linux / -macos / -windows: the helper
+# binary is at a different path on every platform, and each machine signs with
+# its own key.
+[gpg]
+	format = ssh
+[gpg "ssh"]
+	# Lets 'git log --show-signature' verify locally instead of reporting no
+	# signature. Same path on every platform; the file is stowed by the ssh
+	# package.
+	allowedSignersFile = ~/.ssh/allowed_signers
+[commit]
+	gpgsign = true
+[tag]
+	gpgSign = true

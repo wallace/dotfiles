@@ -1,3 +1,9 @@
+[user]
+	# The work laptop's own key, held in 1Password. Register it on GitHub as a
+	# SIGNING key as well as an authentication key.
+	signingkey = ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEYA6OYaSKjVDKpP4NNG/Y5KxuI5LGhyrU9qHnqfXmbU
+[gpg "ssh"]
+	program = /Applications/1Password.app/Contents/MacOS/op-ssh-sign
 [mergetool "p4mergetool"]
 	cmd = /Applications/p4merge.app/Contents/Resources/launchp4merge $PWD/$BASE $PWD/$REMOTE $PWD/$LOCAL $PWD/$MERGED
 [mergetool "p4merge"]

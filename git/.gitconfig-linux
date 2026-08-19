@@ -1,3 +1,10 @@
+[user]
+	# phoenix's own key, held in 1Password. Register it on GitHub as a SIGNING
+	# key — that is a separate list from authentication keys, and a key added
+	# only for auth will still show commits as Unverified.
+	signingkey = ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILqh7+ttaQbNKEoLCqvTArRxZgKpmI/I8Qda2GhWU+Tf
+[gpg "ssh"]
+	program = /opt/1Password/op-ssh-sign
 [mergetool "fugitive"]
   cmd = vim -f -c "Gdiff" "$MERGED"
 [credential "https://github.com"]
