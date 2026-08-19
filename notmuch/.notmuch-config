@@ -11,7 +11,9 @@
 # configured here named ".notmuch".
 #
 [database]
-path=/Users/wallace/.mail/jonathanwallace-gmail.com
+# Non-absolute database paths are taken relative to $HOME (notmuch-config(5)),
+# which keeps this file portable across machines and users.
+path=.mail/jonathanwallace-gmail.com
 
 # User configuration
 #

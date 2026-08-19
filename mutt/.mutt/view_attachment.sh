@@ -10,8 +10,8 @@
 #           Along the way, discern the file type or use the type
 #           That is given.
 #
-#           Finally use 'open' or 'open -a' if the third argument is
-#           given.
+#           Finally hand the file to xdg-open, or to the program named by
+#           the third argument if one is given.
 #
 #
 # Arguments:
@@ -27,7 +27,8 @@
 #
 #                      Open Office and MS Office for example.
 #
-#     $3 is open with.  as in open -a 'open with this .app' foo.xls
+#     $3 is open with.  The program to hand the file to instead of letting
+#                      xdg-open pick, as in 'libreoffice foo.xls'.
 #
 # Examples:  These are typical .mailcap entries which use this program.
 #
@@ -46,12 +47,13 @@
 #         # then you'll need to precede the space with a \ .  I found that too painful
 #         # and renamed it with an _.
 #
-#     Application/vnd.ms-excel; /Users/vdanen/.mutt/view_attachment %s "-" '/Applications/OpenOffice.org1.1.2/Start_OpenOffice.org.app'
-#     Application/msword; /Users/vdanen/.mutt/view_attachment %s "-" '/Applications/OpenOffice.org1.1.2/Start_OpenOffice.org.app'
+#     Application/vnd.ms-excel; ~/.mutt/view_attachment.sh %s "-" libreoffice
+#     Application/msword; ~/.mutt/view_attachment.sh %s "-" libreoffice
 #
 #
-# Debugging:  If you have problems set debug to 'yes'.  That will cause a debug file
-#             be written to /tmp/mutt_attach/debug so you can see what is going on.
+# Debugging:  If you have problems run neomutt with MUTT_ATTACH_DEBUG=yes.  That will
+#             cause a debug file to be written alongside the copied attachment in
+#             $HOME/.tmp/mutt_attach/view.XXXXXX/debug so you can see what is going on.
 #
 # See Also:  The man pages for open, file, basename
 #
@@ -63,10 +65,19 @@ set -u
 # clobber each other), and stays in $HOME rather than world-writable /tmp.
 base_tmp="$HOME/.tmp/mutt_attach"
 mkdir -p "$base_tmp"
+
+# Nothing else ever reaps these, so each viewing would leak a directory forever.
+# A day is well past the point where any viewer we detached below is still
+# reading its copy, so anything older is safe to drop.
+find "$base_tmp" -mindepth 1 -maxdepth 1 -name 'view.*' -mtime +0 \
+    -exec rm -rf -- {} + 2>/dev/null
+
 tmpdir=$(mktemp -d "$base_tmp/view.XXXXXX")
 
 debug_file="$tmpdir/debug"
-debug="yes"
+# Off unless asked for: the debug file is written into the per-invocation dir,
+# so leaving it on means every attachment ever opened leaves litter behind.
+debug="${MUTT_ATTACH_DEBUG:-no}"
 
 src="${1:-}"
 type="${2:-}"
@@ -121,10 +132,14 @@ if [ "$debug" = "yes" ]; then
     } >> "$debug_file"
 fi
 
-# If there's no 'open with' then we can let preview do its thing.
-# Otherwise we've been told what to use.  So do an open -a.
+# If there's no 'open with' then let the desktop's default handler decide.
+# Otherwise we've been told exactly which program to use.
+#
+# Detached, because neomutt blocks until this script returns and there is no
+# reason to freeze the mail client while a PDF viewer is open. The copy above
+# is what makes that safe: neomutt is free to delete its own temp file.
 if [ -z "$open_with" ]; then
-    open -- "$newfile"
+    xdg-open "$newfile" >/dev/null 2>&1 &
 else
-    open -a "$open_with" -- "$newfile"
+    "$open_with" "$newfile" >/dev/null 2>&1 &
 fi

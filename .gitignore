@@ -138,3 +138,12 @@ ubuntu/*.deb
 rbenv/.rbenv/versions/
 rbenv/.rbenv/shims/
 rbenv/.rbenv/version
+
+# Mail working files. ~/.mutt is a stow symlink back into this repo, so
+# neomutt's message cache and temp files land *inside the working tree*.
+# Ignore the contents while keeping the directories themselves tracked --
+# neomutt errors on startup if they do not exist.
+mutt/.mutt/cache/bodies/*
+!mutt/.mutt/cache/bodies/empty-file-for-git
+mutt/.mutt/temp/*
+!mutt/.mutt/temp/empty-file-for-git
