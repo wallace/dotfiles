@@ -33,6 +33,7 @@ Read the script before you pipe it into a shell. That goes for this one too.
 | GitHub CLI | `cli.github.com` | GitHub's own signed repo; Ubuntu's `gh` lags badly on LTS |
 | Claude Code | `claude.ai/install.sh` | Anthropic's native installer; self-updating binary |
 | Claude Desktop | `downloads.claude.ai` | Anthropic's signed apt repo (Linux beta) |
+| Ubuntu Pro | `ubuntu.com/pro` | Free personal tier; the only source of Canonical security updates for `universe` |
 | WhatsApp | your browser | Meta ships no Linux client — see [WHATSAPP_ALTERNATIVES.md](WHATSAPP_ALTERNATIVES.md) |
 
 ## Files
@@ -52,6 +53,43 @@ ubuntu/
 from curl, where a sibling file wouldn't exist. When run from a clone it sources
 the real library instead. Changes to the security-critical helpers must be made
 in **both** places.
+
+## Ubuntu Pro
+
+`provision.sh` checks whether the machine is attached to an Ubuntu Pro
+subscription and reports what is missing. It does **not** attach for you.
+
+The reason to bother: `universe` packages get no Canonical security support
+without it, and this repo installs one that matters — `harden-ssh.sh` pulls in
+`fail2ban`, which lives in universe. Attaching also enables `livepatch`, which
+applies high and critical kernel CVE fixes without a reboot; that is the gap
+`unattended-upgrades` cannot close on its own, since it can install a kernel
+but not make it the running one.
+
+Attaching is deliberately manual. `pro attach` with no token prints a short
+code you approve in a browser, so the token never reaches argv, `ps`, or your
+shell history — whereas a token passed as an environment variable or argument
+would land in all three. That is a bad trade for a script that is otherwise
+safe to read and re-run, so the script instructs rather than automates:
+
+```bash
+sudo pro attach      # no token argument — use the browser code flow
+```
+
+Attaching auto-enables `esm-infra`, `esm-apps` and `livepatch`. The script
+re-checks each one individually afterwards, because attached is not the same
+as covered — a service can be disabled on its own, and a box with `livepatch`
+off still needs a reboot for every kernel CVE.
+
+Verify coverage yourself:
+
+```bash
+pro security-status
+```
+
+Note this step is in `provision.sh` only, not `provision-minimal.sh`: the
+attach flow needs a browser and a person, which is exactly what the minimal
+script has neither of.
 
 ## Remote access (`harden-ssh.sh`)
 

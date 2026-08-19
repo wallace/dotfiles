@@ -26,6 +26,7 @@ WHATSAPP_URL="https://web.whatsapp.com"
 WHATSAPP_CHOICE=""   # filled in by the prompt, reported in the summary
 TELEGRAM_URL="https://web.telegram.org"
 TELEGRAM_CHOICE=""   # apt package, or the web app when the archive lacks it
+UBUNTU_PRO_CHOICE="" # attached state, reported in the summary
 
 # Reuse the installer functions from the minimal script by sourcing the parts
 # we need. They are duplicated here rather than extracted so each script stays
@@ -37,6 +38,87 @@ install_base() {
   # infrastructure, and we need them before brew is even a question.
   apt_install curl gnupg ca-certificates apt-transport-https
   apt_install_unless_brew vim git
+}
+
+# --- Ubuntu Pro ------------------------------------------------------------
+
+# Free for personal use on up to five machines, and the only way to get
+# Canonical security support for 'universe'. That matters here specifically:
+# this repo's own harden-ssh.sh installs fail2ban, which lives in universe and
+# is otherwise community-supported only.
+#
+# Deliberately NOT automated. Attaching needs an account, and 'pro attach'
+# without a token opens a short-code browser flow that keeps the token out of
+# argv, out of 'ps', and out of shell history. Accepting a token as an
+# environment variable would undo all three, so this function detects, reports
+# and instructs — it never handles the secret.
+setup_ubuntu_pro() {
+  step "Ubuntu Pro (free personal subscription)"
+
+  # Ubuntu ships the client preinstalled, but minimal and container images may
+  # not have it. Older releases called the package ubuntu-advantage-tools.
+  if ! have pro; then
+    if ! apt_install_optional ubuntu-pro-client; then
+      apt_install_optional ubuntu-advantage-tools || {
+        warn "no Ubuntu Pro client available from apt; skipping."
+        UBUNTU_PRO_CHOICE="client unavailable"
+        return 0
+      }
+    fi
+  fi
+
+  # No pipe here on purpose: 'pro api ... | grep -q' is the SIGPIPE trap
+  # documented on apt_available in lib/common.sh.
+  local json=""
+  json="$(pro api u.pro.status.is_attached.v1 2>/dev/null)" || json=""
+
+  case "$json" in
+    *'"is_attached": true'*|*'"is_attached":true'*)
+      report_ubuntu_pro_services
+      return 0
+      ;;
+  esac
+
+  warn "this machine is not attached to Ubuntu Pro."
+  warn "Without it, packages from 'universe' — fail2ban among them — get no"
+  warn "Canonical security updates, and kernel fixes always need a reboot."
+  echo >&2
+  ok "It is free for personal use on up to 5 machines. To attach:"
+  ok "  1. register at https://ubuntu.com/pro  (free, personal tier)"
+  ok "  2. run:  sudo pro attach"
+  ok "     with no token — it prints a short code and you approve it in a"
+  ok "     browser, so nothing secret lands in your shell history."
+  ok "Attaching auto-enables esm-infra, esm-apps and livepatch."
+  UBUNTU_PRO_CHOICE="not attached — see the notes above"
+  return 0
+}
+
+# Attached is not the same as covered: services can be individually disabled,
+# and a machine with livepatch off still needs a reboot for every kernel CVE.
+report_ubuntu_pro_services() {
+  local svc="" want missing=()
+  svc="$(pro api u.pro.status.enabled_services.v1 2>/dev/null)" || svc=""
+
+  for want in esm-infra esm-apps livepatch; do
+    case "$svc" in
+      *"\"$want\""*) : ;;
+      *) missing+=("$want") ;;
+    esac
+  done
+
+  if [ ${#missing[@]} -eq 0 ]; then
+    ok "attached, with esm-infra, esm-apps and livepatch all enabled"
+    UBUNTU_PRO_CHOICE="attached (esm-infra, esm-apps, livepatch)"
+  else
+    ok "attached to Ubuntu Pro"
+    warn "not enabled: ${missing[*]}"
+    warn "Enable with: sudo pro enable ${missing[*]}"
+    UBUNTU_PRO_CHOICE="attached; missing ${missing[*]}"
+  fi
+
+  # Attaching adds the ESM apt sources, so the package lists we may already
+  # have refreshed no longer reflect what is available.
+  apt_refresh_needed
 }
 
 install_telegram() {
@@ -367,6 +449,7 @@ $C_GREEN Provisioning complete$C_RESET
 ${C_GREEN}────────────────────────────────────────────────────────$C_RESET
 
   vim              $(have vim && echo 'installed' || echo 'MISSING')
+  ubuntu pro       ${UBUNTU_PRO_CHOICE:-not checked}
   telegram         ${TELEGRAM_CHOICE:-not configured}
   signal           $(have signal-desktop && echo 'installed' || echo 'not installed')
   1password        $(have 1password && echo 'installed' || echo 'not installed')
@@ -405,6 +488,7 @@ main() {
   note_brew
 
   install_base
+  setup_ubuntu_pro
   install_telegram
   install_signal
   install_1password
