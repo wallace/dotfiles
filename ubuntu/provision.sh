@@ -27,6 +27,7 @@ WHATSAPP_CHOICE=""   # filled in by the prompt, reported in the summary
 TELEGRAM_URL="https://web.telegram.org"
 TELEGRAM_CHOICE=""   # apt package, or the web app when the archive lacks it
 UBUNTU_PRO_CHOICE="" # attached state, reported in the summary
+KEYBOARD_CHOICE=""   # Caps Lock remap outcome, reported in the summary
 
 # Reuse the installer functions from the minimal script by sourcing the parts
 # we need. They are duplicated here rather than extracted so each script stays
@@ -38,6 +39,33 @@ install_base() {
   # infrastructure, and we need them before brew is even a question.
   apt_install curl gnupg ca-certificates apt-transport-https
   apt_install_unless_brew vim git
+}
+
+# --- Keyboard --------------------------------------------------------------
+
+# Caps Lock as Control. Why this takes two separate writes, and why it is XKB
+# rather than a remapping daemon, is documented on ensure_xkb_option in
+# lib/common.sh.
+setup_keyboard() {
+  step "Keyboard: Caps Lock as Control"
+
+  local console="no" desktop="no"
+  ensure_xkb_option ctrl:nocaps       && console="yes"
+  ensure_gnome_xkb_option ctrl:nocaps && desktop="yes"
+
+  case "$console/$desktop" in
+    yes/yes) KEYBOARD_CHOICE="ctrl:nocaps (console + GNOME)" ;;
+    yes/no)  KEYBOARD_CHOICE="ctrl:nocaps (console only)" ;;
+    no/yes)  KEYBOARD_CHOICE="ctrl:nocaps (GNOME only)" ;;
+    *)       KEYBOARD_CHOICE="not applied" ;;
+  esac
+
+  if [ "$desktop" = "yes" ]; then
+    ok "live in GNOME now — no logout needed"
+  else
+    ok "takes effect at next login"
+  fi
+  return 0
 }
 
 # --- Ubuntu Pro ------------------------------------------------------------
@@ -449,6 +477,7 @@ $C_GREEN Provisioning complete$C_RESET
 ${C_GREEN}────────────────────────────────────────────────────────$C_RESET
 
   vim              $(have vim && echo 'installed' || echo 'MISSING')
+  caps lock        ${KEYBOARD_CHOICE:-not configured}
   ubuntu pro       ${UBUNTU_PRO_CHOICE:-not checked}
   telegram         ${TELEGRAM_CHOICE:-not configured}
   signal           $(have signal-desktop && echo 'installed' || echo 'not installed')
@@ -488,6 +517,7 @@ main() {
   note_brew
 
   install_base
+  setup_keyboard
   setup_ubuntu_pro
   install_telegram
   install_signal

@@ -89,6 +89,12 @@ $ ./ubuntu/provision.sh              # interactive
 $ ./ubuntu/provision-minimal.sh      # non-interactive, curl|bash-safe
 ```
 
+Both scripts also remap **Caps Lock to Control** via XKB's `ctrl:nocaps`, writing
+`/etc/default/keyboard` for the consoles and GNOME's own `xkb-options` for the
+desktop — GNOME ignores the former, so it takes both. XKB maps per seat, so
+Bluetooth keyboards pick it up along with everything else. Set `SKIP_KEYBOARD=1`
+to opt out.
+
 Everything installs from official, GPG-signed vendor repositories with keys
 pinned by fingerprint — no snaps. The scripts detect Homebrew and skip the apt
 copy of anything your Brewfile already provides. See

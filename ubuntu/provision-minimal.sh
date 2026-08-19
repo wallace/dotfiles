@@ -21,6 +21,7 @@
 #   SKIP_SIGNAL=1    skip Signal
 #   SKIP_1PASSWORD=1 skip 1Password
 #   SKIP_TELEGRAM=1  skip Telegram
+#   SKIP_KEYBOARD=1  leave Caps Lock alone (it is remapped to Control)
 
 set -euo pipefail
 
@@ -265,11 +266,68 @@ else
       *) export PATH="$HOME/.local/bin:$PATH" ;;
     esac
   }
+  # Caps Lock as Control. Two writes: /etc/default/keyboard covers the
+  # consoles and non-GNOME X11, GSettings covers GNOME, and neither falls
+  # back to the other. Both warn rather than die — see lib/common.sh.
+  ensure_xkb_option() {
+    local opt="$1" file=/etc/default/keyboard cur new
+    if [ ! -f "$file" ]; then
+      warn "$file not found — skipping the console half of the remap."
+      return 1
+    fi
+    cur="$(sed -n 's/^[[:space:]]*XKBOPTIONS="\(.*\)"[[:space:]]*$/\1/p' "$file" | tail -n1)"
+    case ",$cur," in
+      *",$opt,"*) ok "$file already sets $opt"; return 0 ;;
+    esac
+    if [ -n "$cur" ]; then new="$cur,$opt"; else new="$opt"; fi
+    if grep -qE '^[[:space:]]*XKBOPTIONS=' "$file"; then
+      sudo sed -i "s|^[[:space:]]*XKBOPTIONS=.*|XKBOPTIONS=\"$new\"|" "$file" || {
+        warn "could not update XKBOPTIONS in $file"; return 1; }
+    else
+      printf 'XKBOPTIONS="%s"\n' "$new" | sudo tee -a "$file" >/dev/null || {
+        warn "could not append XKBOPTIONS to $file"; return 1; }
+    fi
+    ok "set XKBOPTIONS=\"$new\" in $file"
+    if have setupcon; then
+      if sudo setupcon --save-only >/dev/null 2>&1; then
+        ok "console keymap regenerated"
+      else
+        warn "setupcon failed — the console picks this up at next boot."
+      fi
+    fi
+    return 0
+  }
+  ensure_gnome_xkb_option() {
+    local opt="$1" schema="org.gnome.desktop.input-sources" key="xkb-options"
+    local cur list opts=()
+    have gsettings || {
+      warn "gsettings not found — skipping the GNOME half of the remap."; return 1; }
+    # No session bus under `curl | bash` on a headless box: the write would
+    # land nowhere a session ever reads, so say so instead.
+    [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] || {
+      warn "no session D-Bus — not setting the GNOME keyboard option."
+      warn "Re-run from a desktop session, or use Settings > Keyboard."
+      return 1; }
+    gsettings writable "$schema" "$key" >/dev/null 2>&1 || {
+      warn "$schema unavailable here — skipping the GNOME half."; return 1; }
+    cur="$(gsettings get "$schema" "$key" 2>/dev/null)" || cur=""
+    case "$cur" in
+      *"'$opt'"*) ok "GNOME already sets $opt"; return 0 ;;
+    esac
+    mapfile -t opts < <(printf '%s' "$cur" | grep -o "'[^']*'")
+    opts+=("'$opt'")
+    list="$(IFS=,; printf '%s' "${opts[*]}")"
+    gsettings set "$schema" "$key" "[$list]" || {
+      warn "could not set $schema $key"; return 1; }
+    ok "GNOME xkb-options set to [$list]"
+    return 0
+  }
   # --- end inlined library -------------------------------------------------
 fi
 
 WHATSAPP_URL="https://web.whatsapp.com"
 TELEGRAM_URL="https://web.telegram.org"
+KEYBOARD_CHOICE=""   # Caps Lock remap outcome, reported in the summary
 
 # ---------------------------------------------------------------------------
 # Installers. Each is idempotent and safe to re-run.
@@ -281,6 +339,33 @@ install_base() {
   # infrastructure, and we need them before brew is even a question.
   apt_install curl gnupg ca-certificates apt-transport-https
   apt_install_unless_brew vim git
+}
+
+setup_keyboard() {
+  [ "${SKIP_KEYBOARD:-0}" = "1" ] && {
+    warn "leaving Caps Lock alone (SKIP_KEYBOARD=1)"
+    KEYBOARD_CHOICE="skipped"
+    return 0
+  }
+  step "Keyboard: Caps Lock as Control"
+
+  local console="no" desktop="no"
+  ensure_xkb_option ctrl:nocaps       && console="yes"
+  ensure_gnome_xkb_option ctrl:nocaps && desktop="yes"
+
+  case "$console/$desktop" in
+    yes/yes) KEYBOARD_CHOICE="ctrl:nocaps (console + GNOME)" ;;
+    yes/no)  KEYBOARD_CHOICE="ctrl:nocaps (console only)" ;;
+    no/yes)  KEYBOARD_CHOICE="ctrl:nocaps (GNOME only)" ;;
+    *)       KEYBOARD_CHOICE="not applied" ;;
+  esac
+
+  if [ "$desktop" = "yes" ]; then
+    ok "live in GNOME now — no logout needed"
+  else
+    ok "takes effect at next login"
+  fi
+  return 0
 }
 
 install_telegram() {
@@ -476,6 +561,7 @@ $C_GREEN Provisioning complete$C_RESET
 ${C_GREEN}────────────────────────────────────────────────────────$C_RESET
 
   vim              $(have vim && echo 'installed' || echo 'MISSING')
+  caps lock        ${KEYBOARD_CHOICE:-not configured}
   telegram         $(have telegram-desktop && echo 'installed' || echo "browser — $TELEGRAM_URL")
   signal           $(have signal-desktop && echo 'installed' || echo 'not installed')
   1password        $(have 1password && echo 'installed' || echo 'not installed')
@@ -505,6 +591,7 @@ main() {
   note_brew
 
   install_base
+  setup_keyboard
   install_telegram
   install_signal
   install_1password

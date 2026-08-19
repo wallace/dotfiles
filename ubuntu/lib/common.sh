@@ -365,3 +365,124 @@ ensure_local_bin_on_path() {
     *) export PATH="$HOME/.local/bin:$PATH" ;;
   esac
 }
+
+# --- Keyboard layout -------------------------------------------------------
+#
+# Caps Lock as Control, expressed as XKB's own `ctrl:nocaps` option rather than
+# through a remapping daemon like keyd. XKB applies per seat, not per device,
+# so one setting covers the builtin keyboard, USB keyboards and Bluetooth ones
+# alike, and nothing has to run as root at input-event level to make it work.
+#
+# It takes two writes, because two consumers read this and neither falls back
+# to the other:
+#
+#   /etc/default/keyboard  the virtual consoles, and any non-GNOME X11 session,
+#                          by way of console-setup. Root-owned, so it works on
+#                          a headless box with no session at all.
+#   GSettings, per user    GNOME, on both Wayland and X11. GNOME never consults
+#                          /etc/default/keyboard, so without this half the
+#                          desktop keeps stock Caps Lock however the file reads.
+#
+# We deliberately do not write a dconf system database instead. That needs
+# /etc/dconf/profile/user, which a stock Ubuntu desktop does not ship at all,
+# and introducing it rewires how every GSettings key on the box resolves — get
+# the profile wrong and settings silently stop persisting. Far too much blast
+# radius for one modifier, and it would only ever set a *default* that the
+# per-user value below shadows anyway.
+#
+# Both halves are conveniences, not prerequisites: they warn and return
+# non-zero rather than calling die(), so a keyboard that cannot be remapped
+# does not cost you the rest of the run.
+
+# Add an XKB option to /etc/default/keyboard, preserving XKBLAYOUT, XKBMODEL
+# and any options already set. Idempotent.
+ensure_xkb_option() {
+  local opt="$1" file=/etc/default/keyboard cur new
+
+  if [ ! -f "$file" ]; then
+    warn "$file not found — skipping the console half of the remap."
+    warn "It ships with the keyboard-configuration package."
+    return 1
+  fi
+
+  # tail -n1 because the file is sourced as shell: a later assignment wins.
+  cur="$(sed -n 's/^[[:space:]]*XKBOPTIONS="\(.*\)"[[:space:]]*$/\1/p' "$file" | tail -n1)"
+
+  # Compare whole comma-separated elements. A substring test would see
+  # "ctrl:nocaps" inside a hypothetical "ctrl:nocaps_foo" and wrongly skip.
+  case ",$cur," in
+    *",$opt,"*) ok "$file already sets $opt"; return 0 ;;
+  esac
+
+  if [ -n "$cur" ]; then new="$cur,$opt"; else new="$opt"; fi
+
+  if grep -qE '^[[:space:]]*XKBOPTIONS=' "$file"; then
+    sudo sed -i "s|^[[:space:]]*XKBOPTIONS=.*|XKBOPTIONS=\"$new\"|" "$file" || {
+      warn "could not update XKBOPTIONS in $file"
+      return 1
+    }
+  else
+    printf 'XKBOPTIONS="%s"\n' "$new" | sudo tee -a "$file" >/dev/null || {
+      warn "could not append XKBOPTIONS to $file"
+      return 1
+    }
+  fi
+  ok "set XKBOPTIONS=\"$new\" in $file"
+
+  # Regenerate the cached console keymap so a TTY does not wait for a reboot.
+  # There may be no console to configure (containers, WSL), so a failure here
+  # is a warning: the file is written either way and boot will pick it up.
+  if have setupcon; then
+    if sudo setupcon --save-only >/dev/null 2>&1; then
+      ok "console keymap regenerated"
+    else
+      warn "setupcon failed — the console picks this up at next boot."
+    fi
+  fi
+  return 0
+}
+
+# Add an XKB option to GNOME's own list. This is per user and is exactly what
+# Settings > Keyboard writes, so the GUI and this script agree on one value.
+ensure_gnome_xkb_option() {
+  local opt="$1" schema="org.gnome.desktop.input-sources" key="xkb-options"
+  local cur list opts=()
+
+  have gsettings || {
+    warn "gsettings not found — skipping the GNOME half of the remap."
+    return 1
+  }
+
+  # Writing GSettings needs a session bus. Under `curl | bash` on a headless
+  # box, or over a bare SSH connection, there is none, and the write would
+  # either fail outright or land in a throwaway database that no session ever
+  # reads. Saying so is more honest than reporting a success nobody gets.
+  [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] || {
+    warn "no session D-Bus — not setting the GNOME keyboard option."
+    warn "Re-run from a desktop session, or set it in Settings > Keyboard."
+    return 1
+  }
+
+  gsettings writable "$schema" "$key" >/dev/null 2>&1 || {
+    warn "$schema unavailable here — skipping the GNOME half of the remap."
+    return 1
+  }
+
+  cur="$(gsettings get "$schema" "$key" 2>/dev/null)" || cur=""
+  case "$cur" in
+    *"'$opt'"*) ok "GNOME already sets $opt"; return 0 ;;
+  esac
+
+  # Preserve anything already in the list. The value is a GVariant array of
+  # strings — ['grp:alt_shift_toggle'] — and the empty list prints as @as [].
+  mapfile -t opts < <(printf '%s' "$cur" | grep -o "'[^']*'")
+  opts+=("'$opt'")
+  list="$(IFS=,; printf '%s' "${opts[*]}")"
+
+  gsettings set "$schema" "$key" "[$list]" || {
+    warn "could not set $schema $key"
+    return 1
+  }
+  ok "GNOME xkb-options set to [$list]"
+  return 0
+}

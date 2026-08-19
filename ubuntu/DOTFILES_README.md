@@ -35,6 +35,7 @@ Read the script before you pipe it into a shell. That goes for this one too.
 | Claude Desktop | `downloads.claude.ai` | Anthropic's signed apt repo (Linux beta) |
 | Ubuntu Pro | `ubuntu.com/pro` | Free personal tier; the only source of Canonical security updates for `universe` |
 | WhatsApp | your browser | Meta ships no Linux client — see [WHATSAPP_ALTERNATIVES.md](WHATSAPP_ALTERNATIVES.md) |
+| Caps Lock as Control | XKB `ctrl:nocaps` | No extra package and no input daemon; applies per seat, so Bluetooth keyboards get it too |
 
 ## Files
 
@@ -271,6 +272,44 @@ independently, that is information about the vendor.
 
 ```bash
 SKIP_DESKTOP=1 SKIP_SIGNAL=1 ./provision-minimal.sh    # headless box
+SKIP_KEYBOARD=1 ./provision-minimal.sh                 # leave Caps Lock alone
+```
+
+## Keyboard: Caps Lock as Control
+
+`setup_keyboard` applies XKB's `ctrl:nocaps`. XKB maps per seat rather than per
+device, so one setting covers the builtin keyboard, USB keyboards and Bluetooth
+ones alike — nothing needs to run as root at input-event level, and no keyd-style
+daemon gets added to the boot path.
+
+It takes two writes, because two consumers read this and neither falls back to
+the other:
+
+| Write | Covers | Needs |
+|---|---|---|
+| `/etc/default/keyboard` (`XKBOPTIONS`) | virtual consoles, non-GNOME X11 | root; works headless |
+| GSettings `org.gnome.desktop.input-sources xkb-options` | GNOME, Wayland and X11 | a session D-Bus |
+
+GNOME never consults `/etc/default/keyboard`, so the desktop keeps stock Caps
+Lock however that file reads — hence the second write, which is exactly the value
+Settings → Keyboard produces. Without a session bus (`curl | bash` on a headless
+box, or a bare SSH connection) that half is skipped with a warning rather than
+written somewhere no session reads.
+
+Both halves preserve any XKB options already configured and are idempotent. Each
+warns and continues rather than calling `die()`: a keyboard that cannot be
+remapped should not cost you the rest of the run.
+
+There is deliberately no dconf system database. That would need
+`/etc/dconf/profile/user`, which stock Ubuntu does not ship, and introducing it
+rewires how every GSettings key on the box resolves — too much blast radius for
+one modifier, and it would only set a *default* that the per-user value shadows.
+
+To undo:
+
+```bash
+sudo sed -i 's/^XKBOPTIONS=.*/XKBOPTIONS=""/' /etc/default/keyboard
+gsettings reset org.gnome.desktop.input-sources xkb-options
 ```
 
 ## Verifying what the scripts did
