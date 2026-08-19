@@ -1,6 +1,16 @@
+# Homebrew first: on Linux it lives outside the default PATH, and almost
+# everything below (nvim, rbenv, nodenv, delta) is installed through it. Without
+# this, a login bash finds none of them and each init line below fails loudly.
+# Mirrors the same block in zsh/.zshrc.
+if [ "$(uname)" = "Linux" ] && [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
+  eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+fi
+
 # from http://richardhulse.blogspot.com/2008/06/using-git.html
 # this should let us use __git_ps1 in our prompt
-source ~/.git-completion.bash
+# Guarded: this is stowed by the git package, which may not be stowed yet.
+# shellcheck source=/dev/null
+[ -r ~/.git-completion.bash ] && source ~/.git-completion.bash
 
 # export PS1='\w$(__git_ps1 "(%s)") $ '
 
@@ -21,7 +31,10 @@ set -o vi
 alias ..='cd ..'
 alias gpom='git pull origin master'
 alias gp='git push --force-with-lease'
-alias git=hub
+# hub is deprecated upstream in favour of gh, and is not installed by default
+# on Linux. Aliasing unconditionally makes every 'git' invocation fail with
+# "hub: command not found" on any box that lacks it.
+command -v hub >/dev/null && alias git=hub
 
 # history settings
 export HISTFILE=$HOME/.bash_history
@@ -40,8 +53,11 @@ shopt -s histverify
 # Make space perform history expansion.
 #bindkey ' ' magic-space '
 
-if [ -f `brew --prefix`/etc/bash_completion ]; then
-  . `brew --prefix`/etc/bash_completion
+if command -v brew >/dev/null; then
+  _brew_prefix="$(brew --prefix)"
+  # shellcheck source=/dev/null
+  [ -r "$_brew_prefix/etc/bash_completion" ] && . "$_brew_prefix/etc/bash_completion"
+  unset _brew_prefix
 fi
 
 # From http://stackoverflow.com/a/2078422/91029
@@ -115,10 +131,20 @@ alias prune='git fetch --prune ; and git branch --merged | grep -v "*" | xargs -
 
 # Add auto completion for c
 alias c='git co'
-make-completion-wrapper _git _git_checkout_mine git checkout
-complete -o bashdefault -o default -o nospace -F _git_checkout_mine c
+# _git only exists once bash_completion has loaded; without it the wrapper
+# defines a function that calls a command that is not there.
+if declare -F _git >/dev/null; then
+  make-completion-wrapper _git _git_checkout_mine git checkout
+  complete -o bashdefault -o default -o nospace -F _git_checkout_mine c
+fi
 
-export EDITOR=`which nvim`
+# An unguarded `which nvim` leaves EDITOR empty when nvim is absent, which
+# breaks anything that shells out to $EDITOR rather than falling back.
+if command -v nvim >/dev/null; then
+  export EDITOR=nvim
+elif command -v vim >/dev/null; then
+  export EDITOR=vim
+fi
 
 # Make less work with RAW ASCII colors
 # from http://blog.0x1fff.com/2009/11/linux-tip-color-enabled-pager-less.html
@@ -134,10 +160,11 @@ export LESS="-RSM~gIsw"
 
 alias tmux="TERM=screen-256color-bce tmux"
 alias v="nvim"
-export PATH="$HOME/.rbenv/bin:$PATH"
-eval "$(rbenv init -)"
+[ -d "$HOME/.rbenv/bin" ] && export PATH="$HOME/.rbenv/bin:$PATH"
+command -v rbenv >/dev/null && eval "$(rbenv init -)"
 
-source ~/.bashrc.local
+# shellcheck source=/dev/null
+[ -r ~/.bashrc.local ] && source ~/.bashrc.local
 
 # --files: List files that would be searched but do not search
 # --no-ignore: Do not respect .gitignore, etc...
@@ -148,15 +175,26 @@ export FZF_DEFAULT_COMMAND='rg --files --no-ignore --hidden --follow --glob "!.g
 export FZF_COMPLETION_TRIGGER=',,'
 
 # https://github.com/neovim/neovim/issues/2048#issuecomment-78045837
-[[ -f ~/.$TERM.ti ]] || infocmp $TERM | sed 's/kbs=^[hH]/kbs=\\177/' > ~/.$TERM.ti
-tic ~/.$TERM.ti
+# Only the infocmp was guarded before, so 'tic' recompiled the terminfo entry
+# on every single shell start. Build and compile once, together.
+if [ -n "$TERM" ] && [ ! -f ~/."$TERM".ti ] && command -v infocmp >/dev/null; then
+  infocmp "$TERM" | sed 's/kbs=^[hH]/kbs=\\177/' > ~/."$TERM".ti
+  command -v tic >/dev/null && tic ~/."$TERM".ti
+fi
 
 # Base16 Shell
-BASE16_SHELL="$HOME/.config/base16-shell/base16-ocean.dark.sh"
-[[ -s $BASE16_SHELL ]] && source $BASE16_SHELL
+# Interactive terminals only. This script writes OSC colour-palette escape
+# sequences to stdout; sourcing it from a non-interactive shell injects that
+# control-character soup into the output of whatever command was actually run,
+# which corrupts anything capturing that output.
+if [[ $- == *i* ]] && [ -t 1 ]; then
+  BASE16_SHELL="$HOME/.config/base16-shell/base16-ocean.dark.sh"
+  # shellcheck source=/dev/null
+  [[ -s $BASE16_SHELL ]] && source "$BASE16_SHELL"
+fi
 
-# show colors in macOS
-export CLICOLOR=1
+# macOS-only: ls colour flag. Harmless elsewhere, but keep the intent clear.
+[ "$(uname)" = "Darwin" ] && export CLICOLOR=1
 
 # Path to the bash it configuration
 export BASH_IT="$HOME/.bash_it"
@@ -204,18 +242,28 @@ export SCM_CHECK=true
 # vendored here, so guard the source: without this, every bash startup on a box
 # that never ran the clone fails with "No such file or directory".
 #   git clone --depth=1 https://github.com/Bash-it/bash-it.git ~/.bash_it
+# shellcheck source=/dev/null
 [ -s "$BASH_IT/bash_it.sh" ] && source "$BASH_IT/bash_it.sh"
 
-export PATH="$HOME/.pyenv/bin:$PATH"
-eval "$(pyenv init -)"
-eval "$(pyenv virtualenv-init -)"
-export PATH="/usr/local/opt/mysql@5.7/bin:$PATH"
-eval "$(nodenv init -)"
-export PATH="/usr/local/opt/postgresql@10/bin:$PATH"
+[ -d "$HOME/.pyenv/bin" ] && export PATH="$HOME/.pyenv/bin:$PATH"
+if command -v pyenv >/dev/null; then
+  eval "$(pyenv init -)"
+  # virtualenv-init is a separate pyenv plugin and is not always installed.
+  pyenv commands 2>/dev/null | grep -qx virtualenv-init && eval "$(pyenv virtualenv-init -)"
+fi
 
-# Setting PATH for Python 3.6
-# The original version is saved in .bash_profile.pysave
-PATH="/Library/Frameworks/Python.framework/Versions/3.6/bin:${PATH}"
+command -v nodenv >/dev/null && eval "$(nodenv init -)"
+
+# Intel-Homebrew and system-framework paths. These exist only on macOS; adding
+# them on Linux just pads PATH with directories that will never resolve.
+if [ "$(uname)" = "Darwin" ]; then
+  [ -d /usr/local/opt/mysql@5.7/bin ] && export PATH="/usr/local/opt/mysql@5.7/bin:$PATH"
+  [ -d /usr/local/opt/postgresql@10/bin ] && export PATH="/usr/local/opt/postgresql@10/bin:$PATH"
+  # The original version is saved in .bash_profile.pysave
+  _py36=/Library/Frameworks/Python.framework/Versions/3.6/bin
+  [ -d "$_py36" ] && PATH="$_py36:${PATH}"
+  unset _py36
+fi
 
 # Set up go for using protobufs and generating the handlers
 GOPATH="$HOME/go"
