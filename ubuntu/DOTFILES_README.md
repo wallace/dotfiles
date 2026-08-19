@@ -65,12 +65,14 @@ machines they aren't sitting in front of.
 SSH_ALLOW_FROM=192.168.1.0/24 ./harden-ssh.sh    # LAN only — the strongest option here
 SSH_PASSWORD_AUTH=yes ./harden-ssh.sh            # also accept passwords
 SSH_PORT=2222 ./harden-ssh.sh                    # non-default port
+SSH_ALLOW_USERS="jrw deploy" ./harden-ssh.sh     # accounts allowed to log in
 ```
 
 | Setting | Default | Notes |
 |---|---|---|
 | `PasswordAuthentication` | `no` | Keys always work. Passwords are opt-in because a reachable box with them enabled is guessed at continuously. |
 | `PermitRootLogin` | `no` | Log in as yourself, then `sudo`. |
+| `AllowUsers` | you alone | Every other account is refused before authentication, whatever its keys or password say. The script refuses a list that omits you. |
 | ufw inbound | deny | The SSH allow rule is written *before* the policy flips — the reverse order is the classic way to lose a remote box. |
 | fail2ban `sshd` | 5 tries / 10 min → 1 h | Ban time multiplies on repeat offences, up to a week. |
 

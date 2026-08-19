@@ -22,6 +22,7 @@
 #                            which on a routable address means the whole internet.
 #   SSH_PASSWORD_AUTH=yes    accept passwords as well as keys. Default no.
 #   SSH_PORT=<n>             listen on a non-default port. Default 22.
+#   SSH_ALLOW_USERS="a b"    accounts permitted to log in. Default: you alone.
 #
 # Re-running is safe: every step checks the current state first.
 
@@ -39,6 +40,10 @@ _here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 SSH_ALLOW_FROM="${SSH_ALLOW_FROM:-}"
 SSH_PASSWORD_AUTH="${SSH_PASSWORD_AUTH:-no}"
 SSH_PORT="${SSH_PORT:-22}"
+# Default to the invoking user alone. Every other account — service accounts,
+# anything a package created — is then refused at the SSH layer regardless of
+# what lands in its authorized_keys or how weak its password is.
+SSH_ALLOW_USERS="${SSH_ALLOW_USERS:-$(id -un)}"
 
 # Where our drop-ins live. Both directories are read by their daemon in
 # lexical order, so the numeric prefixes are load-bearing, not decoration.
@@ -58,6 +63,24 @@ validate_inputs() {
   esac
   [ "$SSH_PORT" -ge 1 ] && [ "$SSH_PORT" -le 65535 ] \
     || die "SSH_PORT out of range: $SSH_PORT"
+
+  # An empty AllowUsers is not "allow everyone", it is a config error that
+  # sshd rejects — and we would only find out at restart, after the drop-in
+  # is already in place.
+  case "$SSH_ALLOW_USERS" in
+    '' | *[!A-Za-z0-9._@\ -]*)
+      die "SSH_ALLOW_USERS must be a space-separated list of account names, got '$SSH_ALLOW_USERS'." ;;
+  esac
+
+  # Locking yourself out via AllowUsers is as easy as via authorized_keys, and
+  # just as final. Refuse the obvious case.
+  local me; me="$(id -un)"
+  case " $SSH_ALLOW_USERS " in
+    *" $me "*) : ;;
+    *) die "SSH_ALLOW_USERS ('$SSH_ALLOW_USERS') does not include you ($me).
+     You would not be able to log in. Add $me, or set the list deliberately
+     to something that includes an account you can reach." ;;
+  esac
 
   # ufw rejects a malformed CIDR with a usage message and a zero exit in some
   # versions, which would leave us "allowing" nothing at all. Check it here
@@ -182,6 +205,10 @@ KbdInteractiveAuthentication $SSH_PASSWORD_AUTH
 
 PubkeyAuthentication yes
 PermitRootLogin no
+
+# Only these accounts may log in over SSH. Anything not listed is refused
+# before authentication, whatever its keys or password say.
+AllowUsers $SSH_ALLOW_USERS
 # Bounded, so a stalled or spamming client cannot hold a slot open forever.
 MaxAuthTries 4
 LoginGraceTime 30"
@@ -227,6 +254,14 @@ validate_sshd_config() {
     warn "Something earlier in the drop-in order is winning — see the warnings above."
   else
     ok "sshd config valid (PasswordAuthentication=${effective_pw:-$SSH_PASSWORD_AUTH})"
+  fi
+
+  local effective_users
+  effective_users="$(sudo sshd -T 2>/dev/null | awk '/^allowusers /{$1=""; sub(/^ /,""); print}')"
+  if [ -n "$effective_users" ]; then
+    ok "AllowUsers resolves to: $effective_users"
+  else
+    warn "sshd reports no AllowUsers — every account with credentials can log in."
   fi
 }
 
@@ -427,6 +462,7 @@ ${C_GREEN}───────────────────────�
   listening on     port $SSH_PORT
   password auth    $SSH_PASSWORD_AUTH$pw_note
   root login       no
+  allowed users    $SSH_ALLOW_USERS
   reachable from   ${SSH_ALLOW_FROM:-any source (rate-limited)}
   firewall         $(sudo ufw status 2>/dev/null | awk '/^Status:/{print $2}')
   fail2ban         $(sudo fail2ban-client status sshd >/dev/null 2>&1 && echo 'sshd jail active' || echo 'sshd jail NOT active')
@@ -438,7 +474,7 @@ Config this script owns:
 Check on it:
   sudo ufw status verbose
   sudo fail2ban-client status sshd
-  sudo sshd -T | grep -iE 'port|passwordauth|permitrootlogin'
+  sudo sshd -T | grep -iE 'port|passwordauth|permitrootlogin|allowusers'
 
 Unban a host you locked out:
   sudo fail2ban-client set sshd unbanip <ip>
