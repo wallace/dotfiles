@@ -17,6 +17,20 @@ issue-reports/data/
 # ---------------------------------------------------------------------------
 .ssh/
 **/.ssh/
+
+# One deliberate exception: the `ssh` stow package carries the SSH *client
+# config*, which is not secret and has to be tracked for stow to place it.
+# Re-include that directory, then immediately re-exclude everything inside it
+# and allow back only the specific files by exact name. The re-exclusion is
+# the point: a private key that ever lands in ssh/.ssh/ stays ignored, because
+# nothing here matches it. Adding a new per-OS config means adding a line
+# below — on purpose, not by a glob that quietly widens over time.
+!ssh/.ssh/
+ssh/.ssh/*
+!ssh/.ssh/config
+!ssh/.ssh/config-linux
+!ssh/.ssh/config-macos
+
 id_rsa
 id_ed25519
 id_ecdsa

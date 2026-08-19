@@ -193,3 +193,12 @@ export VOICE_PIPELINE_PYTHON="$HOME/.venvs/voice-pipeline/bin/python"
 # Restore-all (undo the lean defaults): copy back the newest backups -
 #   ~/.copilot/mcp-config.json.bak.*  and  ~/.copilot/settings.json.bak.*
 alias copilot='copilot --disable-builtin-mcps'
+
+# 1Password's SSH agent, for tools that don't read ~/.ssh/config (which does
+# set IdentityAgent). The socket is in a different place on each OS and this
+# file is stowed on both, so branch rather than hardcoding the Linux path.
+if [[ $(uname) == "Darwin" ]]; then
+    export SSH_AUTH_SOCK="$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+elif [[ $(uname) == "Linux" ]]; then
+    export SSH_AUTH_SOCK="$HOME/.1password/agent.sock"
+fi
