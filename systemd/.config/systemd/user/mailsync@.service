@@ -1,0 +1,19 @@
+# Template unit: the instance name is the mbsync channel or group to sync, so
+# `mailsync@gmail-inbox.service` syncs just the inbox and `mailsync@gmail.service`
+# syncs the whole group. Both timers below activate this one file.
+[Unit]
+Description=Sync Gmail channel %i to the local Maildir, then refresh notmuch
+Documentation=man:mbsync(1) man:notmuch(1)
+
+[Service]
+Type=oneshot
+# systemd's user manager runs with a minimal PATH that includes neither
+# Homebrew nor ~/bin, so mailsync, mbsync, notmuch and secret-tool would all
+# be unfindable. Set it explicitly rather than relying on a login shell that
+# never runs here.
+Environment=PATH=%h/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin
+ExecStart=%h/bin/mailsync %i
+# No SuccessExitStatus override on purpose. mailsync exits non-zero when mbsync
+# fails -- dropped network, or Gmail's OVERQUOTA throttle -- while still
+# indexing whatever did arrive. Letting that surface in `systemctl --user
+# status` is the point; the timer keeps firing regardless.
