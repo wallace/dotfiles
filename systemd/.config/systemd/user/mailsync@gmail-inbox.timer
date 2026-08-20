@@ -1,0 +1,19 @@
+# The routine one. Inbox-only syncs finish in seconds, so they are cheap to run
+# often. The full-group sweep is a separate, slower timer.
+[Unit]
+Description=Sync the Gmail inbox every 5 minutes
+
+[Timer]
+# Wall-clock rather than OnBootSec + OnUnitActiveSec. That pair looks natural
+# but primes badly for a oneshot service enabled long after boot: the OnBootSec
+# trigger fires once, immediately, and then OnUnitActiveSec fails to compute a
+# next elapse (`NextElapseUSecMonotonic=infinity`), so the timer runs exactly
+# once and never again. A calendar spec always has a well-defined next run.
+OnCalendar=*:0/5
+# Skipped polls are not worth catching up on -- the next one is five minutes
+# away regardless.
+Persistent=false
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

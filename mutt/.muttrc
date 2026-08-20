@@ -29,6 +29,11 @@ folder-hook . 'set read_inc=1000'
 set sidebar_visible = yes
 set sidebar_format = "%B%?F? [%F]?%* %?N?%N/?%S"
 set mail_check_stats
+# %B above is the full mailbox name, and every mailbox here starts with the
+# same 25-character `jonathanwallace-gmail.com/` prefix -- so without this the
+# only distinguishing part of the name is exactly what gets truncated away.
+set sidebar_short_path
+set sidebar_width = 22
 
 # Status Bar -----------------------------------------
 set status_chars  = " *%A"

@@ -15,6 +15,18 @@
 
 set -euo pipefail
 
+# Serialize runs against each other. The five-minute inbox timer and the hourly
+# full sweep both cover gmail-inbox, so roughly once an hour they overlap and
+# the loser dies on mbsync's per-mailbox lock -- a spurious failed unit for
+# what is really just a scheduling collision. flock makes the second one wait
+# its turn instead. The timeout is a backstop: a full sweep of All Mail runs a
+# few minutes, so ten is generous, and giving up beats queueing syncs forever.
+exec 9>"${XDG_RUNTIME_DIR:-/tmp}/mailsync.lock"
+if ! flock -w 600 9; then
+    echo "mailsync: another sync held the lock for 10 minutes; giving up" >&2
+    exit 75  # EX_TEMPFAIL
+fi
+
 # `|| rc=$?` rather than a bare call: under `set -e` a non-zero mbsync would
 # abort the script and skip indexing entirely. That is the wrong failure mode.
 # A sync that dies partway -- dropped network, Ctrl-C, or the per-mailbox lock

@@ -1,0 +1,15 @@
+# The full sweep: picks up sent, drafts, flagged and archive, which the
+# five-minute inbox timer never touches. Reconciling ~41k UIDs in All Mail
+# takes a few minutes of mostly-idle IMAP round-trips, so hourly is plenty.
+[Unit]
+Description=Sync all Gmail channels hourly
+
+[Timer]
+OnCalendar=hourly
+# Run a missed sweep once the machine is back rather than waiting for the next
+# hour boundary -- this one is worth catching up on, unlike the inbox poll.
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

@@ -383,6 +383,41 @@ Setup, once per machine:
    `mailsync` still indexes whatever landed before the cutoff, so mail stays
    searchable between attempts.
 
+#### Automatic syncing
+
+Two systemd user timers (the `systemd` package) keep the Maildir current, both
+activating the same `mailsync@.service` template with the channel as the
+instance name:
+
+| Timer | Runs | Why that cadence |
+| --- | --- | --- |
+| `mailsync@gmail-inbox.timer` | every 5 min | Inbox-only syncs finish in seconds |
+| `mailsync@gmail.timer` | hourly | Full sweep reconciles ~41k UIDs in All Mail; takes a few minutes |
+
+```
+$ stow -t ~ systemd
+$ systemctl --user daemon-reload
+$ systemctl --user enable --now mailsync@gmail-inbox.timer mailsync@gmail.timer
+$ systemctl --user list-timers 'mailsync*'
+```
+
+Two things the units have to handle that are easy to miss:
+
+- **PATH.** systemd's user manager runs with a minimal PATH containing neither
+  Homebrew nor `~/bin`, so `mbsync`, `notmuch`, and `secret-tool` are all
+  invisible to it. `mailsync@.service` sets PATH explicitly rather than
+  depending on a login shell that never runs.
+- **Overlap.** Both timers cover `gmail-inbox`, so about once an hour they
+  collide on mbsync's per-mailbox lock. `mailsync` takes an `flock` first, so
+  the second run waits its turn instead of failing spuriously.
+
+Failures stay visible — `mailsync` returns mbsync's exit status, so a dropped
+network or an OVERQUOTA throttle shows up in `systemctl --user status`, while
+the timer keeps firing and the index still gets whatever arrived.
+
+Note `Linger=no`: user timers run only while you are logged in. For syncing on
+a headless or logged-out box, `sudo loginctl enable-linger $USER`.
+
 Day to day, `O` in neomutt syncs everything and `o` syncs only the inbox. Both
 call `mailsync`, which runs `notmuch new` afterwards — mbsync has no equivalent
 of offlineimap's `postsynchook`, so the wrapper supplies it.
