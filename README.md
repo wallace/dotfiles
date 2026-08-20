@@ -365,6 +365,24 @@ Setup, once per machine:
    $ mailsync                 # the whole `gmail` group, when you're ready
    ```
 
+   **Expect the archive sync to be interrupted.** Gmail caps IMAP downloads at
+   2500 MB/day; All Mail here is ~6.5 GB, so the cold sync trips it and the
+   server closes the connection with:
+
+   ```
+   IMAP error: unexpected BYE response: [OVERQUOTA] Account exceeded command or bandwidth limits.
+   ```
+
+   That is throttling, not corruption or misconfiguration. The block clears in
+   about an hour (up to 24), and mbsync resumes exactly where it stopped --
+   `.mbsyncstate.journal` records each transfer, so re-running picks up the
+   remainder rather than restarting. Just run `mailsync gmail-archive` again,
+   as many times as it takes. This is a one-time cost: once the archive is
+   local, incremental syncs are tiny and never approach the limit.
+
+   `mailsync` still indexes whatever landed before the cutoff, so mail stays
+   searchable between attempts.
+
 Day to day, `O` in neomutt syncs everything and `o` syncs only the inbox. Both
 call `mailsync`, which runs `notmuch new` afterwards — mbsync has no equivalent
 of offlineimap's `postsynchook`, so the wrapper supplies it.
