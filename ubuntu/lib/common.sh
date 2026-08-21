@@ -34,6 +34,11 @@ readonly GH_FPR="2C6106201985B60E6C7AC87323F3D4EA75716059 7F38BBB59D064DBCB3D84D
 # The low 64 bits of this fingerprint (AC2D62742012EA22) are also the debsig
 # "origin id", i.e. the directory name dpkg looks under to verify the .deb.
 readonly ONEPASSWORD_FPR="3FEF9748469ADBE15DA7CA80AC2D62742012EA22"
+# Dropbox: one key signs every distro Dropbox packages for, and it is published
+# only under the Fedora path — https://linux.dropbox.com/fedora/rpm-public-key.asc.
+# That it also signs the Ubuntu archive is checkable: the Release.gpg on
+# linux.dropbox.com/ubuntu names this fingerprint as its issuer.
+readonly DROPBOX_FPR="1C61A2656FB57B7E4DE0F4C1FC918B335044912E"
 
 # --- Output ----------------------------------------------------------------
 
