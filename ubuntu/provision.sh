@@ -28,6 +28,8 @@ TELEGRAM_URL="https://web.telegram.org"
 TELEGRAM_CHOICE=""   # apt package, or the web app when the archive lacks it
 UBUNTU_PRO_CHOICE="" # attached state, reported in the summary
 KEYBOARD_CHOICE=""   # Caps Lock remap outcome, reported in the summary
+EMOJI_FONT_CHOICE="" # ibus emoji picker font, reported in the summary
+EMOJI_HOTKEY_CHOICE="" # ibus emoji hotkey split, reported in the summary
 
 # Reuse the installer functions from the minimal script by sourcing the parts
 # we need. They are duplicated here rather than extracted so each script stays
@@ -65,6 +67,95 @@ setup_keyboard() {
   else
     ok "takes effect at next login"
   fi
+  return 0
+}
+
+# Prepares emoji input for the Emoji Copy shell extension
+# (extensions.gnome.org/extension/6242), which is installed by hand:
+#
+#   1. Points the ibus picker at a colour font; it ships 'Monospace 16'.
+#   2. Drops Super+. from the ibus hotkey list, leaving Super+;, so the
+#      extension can take Super+. for itself.
+setup_emoji_input() {
+  step "Emoji: colour font for ibus, and freeing Super+. for the shell extension"
+
+  local schema="org.freedesktop.ibus.panel.emoji"
+  local font_want="Noto Color Emoji 16"
+  local keys_stock="['<Super>period', '<Super>semicolon']"
+  local keys_want="['<Super>semicolon']"
+  local cur
+
+  have gsettings || {
+    warn "gsettings not found — skipping emoji setup."
+    return 1
+  }
+
+  # Same reasoning as ensure_gnome_xkb_option: no session bus means the write
+  # lands in a database no session will ever read.
+  [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] || {
+    warn "no session D-Bus — not touching the emoji settings."
+    warn "Re-run from a desktop session."
+    return 1
+  }
+
+  # Fails when ibus is not installed, which is the honest reason to skip.
+  gsettings writable "$schema" font >/dev/null 2>&1 || {
+    warn "ibus emoji schema unavailable — is ibus installed?"
+    return 1
+  }
+
+  # --- 1. Picker font ---
+
+  # Setting a font the box does not have would leave the picker looking
+  # exactly as broken as before, so check before promising anything.
+  if have fc-list && ! fc-list | grep -qi 'Noto Color Emoji'; then
+    warn "Noto Color Emoji not installed — skipping the font."
+    warn "Install fonts-noto-color-emoji, then re-run."
+    EMOJI_FONT_CHOICE="skipped (no colour emoji font)"
+  else
+    cur="$(gsettings get "$schema" font 2>/dev/null | tr -d "'")" || cur=""
+    case "$cur" in
+      "$font_want")
+        EMOJI_FONT_CHOICE="$font_want (already set)"
+        ok "font already $font_want" ;;
+      "Monospace 16"|"")
+        # The stock value, ours to replace.
+        if gsettings set "$schema" font "$font_want"; then
+          EMOJI_FONT_CHOICE="$font_want"
+          ok "picker font set to $font_want"
+        else
+          warn "could not set $schema font"
+          EMOJI_FONT_CHOICE="failed"
+        fi ;;
+      *)
+        # Somebody chose this deliberately. Leave it alone.
+        EMOJI_FONT_CHOICE="left as '$cur'"
+        ok "custom font '$cur' already set — leaving it alone" ;;
+    esac
+  fi
+
+  # --- 2. Hotkey split ---
+
+  # Only the stock two-chord list is ours to trim. Anything else is a choice
+  # somebody made, and silently dropping a binding they rely on would be rude.
+  cur="$(gsettings get "$schema" hotkey 2>/dev/null)" || cur=""
+  case "$cur" in
+    "$keys_want")
+      EMOJI_HOTKEY_CHOICE="Super+; (already split)"
+      ok "ibus already limited to Super+;" ;;
+    "$keys_stock")
+      if gsettings set "$schema" hotkey "$keys_want"; then
+        EMOJI_HOTKEY_CHOICE="Super+; (Super+. left for the extension)"
+        ok "ibus now Super+; — Super+. is free for Emoji Copy"
+      else
+        warn "could not set $schema hotkey"
+        EMOJI_HOTKEY_CHOICE="failed"
+      fi ;;
+    *)
+      EMOJI_HOTKEY_CHOICE="left as $cur"
+      ok "custom emoji hotkeys set — leaving them alone" ;;
+  esac
+
   return 0
 }
 
@@ -478,6 +569,8 @@ ${C_GREEN}───────────────────────�
 
   vim              $(have vim && echo 'installed' || echo 'MISSING')
   caps lock        ${KEYBOARD_CHOICE:-not configured}
+  emoji font       ${EMOJI_FONT_CHOICE:-not configured}
+  emoji hotkey     ${EMOJI_HOTKEY_CHOICE:-not configured}
   ubuntu pro       ${UBUNTU_PRO_CHOICE:-not checked}
   telegram         ${TELEGRAM_CHOICE:-not configured}
   signal           $(have signal-desktop && echo 'installed' || echo 'not installed')
@@ -518,6 +611,7 @@ main() {
 
   install_base
   setup_keyboard
+  setup_emoji_input
   setup_ubuntu_pro
   install_telegram
   install_signal
