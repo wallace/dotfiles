@@ -430,6 +430,158 @@ install_claude_desktop() {
     || warn "Claude Desktop's apt repo is configured; retry with 'sudo apt install claude-desktop'."
 }
 
+install_dropbox() {
+  step "Dropbox (official Dropbox apt repository)"
+
+  local arch; arch="$(dpkg --print-architecture)"
+  case "$arch" in
+    amd64|i386) : ;;
+    *) warn "Dropbox publishes amd64 and i386 only (this box is $arch). Skipping."; return 0 ;;
+  esac
+
+  # Dropbox ships one signing key for everything it packages, and serves it
+  # only from the Fedora path — there is no .asc under /ubuntu. It is the same
+  # key: the signature on the Ubuntu archive's own Release names this
+  # fingerprint as its issuer. Check that for yourself with
+  #   curl -fsSL https://linux.dropbox.com/ubuntu/dists/noble/Release.gpg \
+  #     | gpg --list-packets | grep 'issuer fpr'
+  install_keyring \
+    "https://linux.dropbox.com/fedora/rpm-public-key.asc" \
+    "/usr/share/keyrings/dropbox-archive-keyring.gpg" \
+    "$DROPBOX_FPR" \
+    --dearmor
+
+  # The archive is indexed per Ubuntu codename and 404s for one it does not
+  # carry. Writing a source for a missing suite would make the next
+  # 'apt-get update' fail for *every* repo on the box and abort the run, so
+  # probe first and fall back to a release Dropbox does index. The pool is
+  # shared between suites, so the package that lands is the same either way.
+  local suite="" candidate code
+  for candidate in "${VERSION_CODENAME:-}" noble jammy; do
+    [ -n "$candidate" ] || continue
+    code="$(curl -s -o /dev/null -w '%{http_code}' --proto '=https' --tlsv1.2 \
+            "https://linux.dropbox.com/ubuntu/dists/$candidate/Release" 2>/dev/null)" || code=""
+    [ "$code" = "200" ] && { suite="$candidate"; break; }
+    warn "linux.dropbox.com carries no index for '$candidate' (HTTP ${code:-no reply})"
+  done
+  if [ -z "$suite" ]; then
+    warn "no usable Dropbox suite found; leaving apt sources untouched."
+    return 0
+  fi
+  [ "$suite" = "${VERSION_CODENAME:-}" ] || ok "using Dropbox's '$suite' index instead"
+
+  write_apt_source /etc/apt/sources.list.d/dropbox.list \
+"deb [arch=$arch signed-by=/usr/share/keyrings/dropbox-archive-keyring.gpg] https://linux.dropbox.com/ubuntu $suite main"
+
+  apt_update_once
+  apt_install_optional dropbox || {
+    warn "Dropbox's apt repo is configured; retry with 'sudo apt install dropbox'."
+    return 0
+  }
+
+  # What apt just installed is only the launcher and the Nautilus extension.
+  # The sync daemon itself is proprietary and downloads into ~/.dropbox-dist
+  # the first time you run 'dropbox start -i'. The launcher verifies that
+  # download's GPG signature and refuses to install on a mismatch — but only
+  # when python3-gpg is importable. Without it you get "we will not be able to
+  # verify binary signatures" and the daemon installs unchecked. The package
+  # merely Suggests python3-gpg, so pull it in rather than leave the only
+  # check on that download quietly disabled.
+  apt_install_optional python3-gpg \
+    || warn "python3-gpg missing: 'dropbox start -i' will not verify the daemon's signature."
+}
+
+install_obsidian() {
+  step "Obsidian (official .deb from Obsidian's GitHub releases)"
+
+  # Obsidian runs no apt repository. Every Linux artifact is a plain file on a
+  # GitHub release, with no detached signature and no published checksum, so
+  # this is the one install here with no key to pin: the trust is TLS to
+  # github.com plus the build being Obsidian's own. The alternatives are worse
+  # rather than better — the snap is out by policy, and Obsidian's own download
+  # page labels the Flathub build "Community maintained", so that is not a
+  # first-party artifact either. This .deb is the only first-party package apt
+  # can install.
+  #
+  # The consequence to be clear about: apt will never update it. Obsidian
+  # updates its own app layer in place, but the Electron shell underneath only
+  # moves when a new package is installed. Re-run this script for that.
+  local arch; arch="$(dpkg --print-architecture)"
+  if [ "$arch" != "amd64" ]; then
+    warn "Obsidian publishes a .deb for amd64 only (this box is $arch). Skipping."
+    warn "There is an arm64 AppImage at https://obsidian.md/download."
+    return 0
+  fi
+
+  step "Resolving the latest Obsidian release"
+  local url="" ver=""
+  url="$(curl -fsSL --proto '=https' --tlsv1.2 \
+        https://api.github.com/repos/obsidianmd/obsidian-releases/releases/latest 2>/dev/null \
+        | grep -oE '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]+/obsidian_[0-9.]+_amd64\.deb"' \
+        | head -n1 | cut -d'"' -f4 || true)"
+  if [ -z "$url" ]; then
+    warn "could not resolve an amd64 .deb from the latest Obsidian release."
+    warn "GitHub rate-limits unauthenticated API calls; try again later, or take"
+    warn "the package from https://obsidian.md/download by hand."
+    return 0
+  fi
+  ver="$(printf '%s\n' "$url" | sed -n 's|.*/obsidian_\([0-9.]*\)_amd64\.deb$|\1|p')"
+  if [ -z "$ver" ]; then
+    warn "unexpected asset name, refusing to guess a version: $url"
+    return 0
+  fi
+
+  local cur=""
+  cur="$(dpkg-query -W -f='${Version}' obsidian 2>/dev/null)" || cur=""
+  if [ "$cur" = "$ver" ]; then
+    ok "obsidian $ver already installed, and it is the current release"
+    return 0
+  fi
+  [ -z "$cur" ] || ok "upgrading obsidian $cur -> $ver"
+
+  local tmp=""
+  tmp="$(mktemp -d)" || { warn "mktemp failed; skipping Obsidian."; return 0; }
+  # shellcheck disable=SC2064
+  trap "rm -rf '$tmp'" RETURN EXIT
+  # apt drops to the _apt user to read the file and warns about an unsandboxed
+  # download when it cannot, so make the path readable rather than 0700.
+  chmod 0755 "$tmp"
+
+  local deb="$tmp/obsidian_${ver}_amd64.deb"
+  step "Downloading $url"
+  # ~100MB. Show a progress bar when someone is watching, and stay silent when
+  # the run is piped to a log — curl's meter renders as line noise there.
+  local meter=(--no-progress-meter)
+  [ -t 2 ] && meter=(--progress-bar)
+  curl -fL --proto '=https' --tlsv1.2 "${meter[@]}" "$url" -o "$deb" || {
+    warn "download failed; skipping Obsidian."
+    return 0
+  }
+  chmod 0644 "$deb"
+
+  # There is no upstream checksum to compare against, so record the one we got.
+  # That proves nothing about this download; it makes the next one comparable,
+  # here or against a fresh download on another machine.
+  local sum="" record="$HOME/.local/share/dotfiles-provisioning/obsidian.sha256"
+  sum="$(sha256sum "$deb" | cut -d' ' -f1)"
+  mkdir -p "$(dirname "$record")"
+  grep -qsF "$sum" "$record" \
+    || printf '%s  obsidian_%s_amd64.deb\n' "$sum" "$ver" >> "$record"
+  ok "sha256 $sum"
+  ok "recorded in $record"
+
+  step "Installing obsidian $ver"
+  # apt, not 'dpkg -i': apt pulls the .deb's dependencies in, where dpkg leaves
+  # the package unconfigured and hands you the list to sort out yourself.
+  if sudo apt-get install -y -q "$deb"; then
+    ok "installed obsidian $ver"
+    ok "apt will not update this — re-run the script when a release lands"
+  else
+    warn "failed to install obsidian $ver — continuing with the rest of the run."
+  fi
+  return 0
+}
+
 # --- WhatsApp --------------------------------------------------------------
 
 # The menu goes to stderr on purpose. This function's stdout is captured by the
@@ -579,12 +731,15 @@ ${C_GREEN}───────────────────────�
   gh (github cli)  $(have gh && echo 'installed' || echo 'not installed')
   claude (code)    $(have claude && echo 'installed' || echo 'not installed')
   claude-desktop   $(have claude-desktop && echo 'installed' || echo 'not installed')
+  dropbox          $(pkg_installed dropbox && echo 'installed — run: dropbox start -i' || echo 'not installed')
+  obsidian         $(pkg_installed obsidian && echo 'installed' || echo 'not installed')
   whatsapp         ${WHATSAPP_CHOICE:-not configured}
 
 Signing keys pinned and verified this run:
   Anthropic  $ANTHROPIC_FPR
   Signal     $SIGNAL_FPR
   1Password  $ONEPASSWORD_FPR
+  Dropbox    $DROPBOX_FPR
   GitHub     ${GH_FPR// /
              }
 
@@ -592,10 +747,12 @@ Next steps:
   1. Open a new shell (or: source ~/.bashrc) so ~/.local/bin is on PATH.
   2. Run 'claude' and sign in.
   3. Launch Claude Desktop from your app launcher, or run 'claude-desktop'.
+  4. Run 'dropbox start -i' to fetch and start the sync daemon, then sign in.
 
 Updates:
-  Signal, 1Password, Claude Desktop ->  sudo apt update && sudo apt upgrade
+  Signal, 1Password, Dropbox, gh    ->  sudo apt update && sudo apt upgrade
   Claude Code                       ->  self-updates; force with 'claude update'
+  Obsidian                          ->  NOT on apt — re-run this script
   WhatSie AppImage, if installed    ->  re-run this script to fetch the latest
 
 EOF
@@ -619,6 +776,8 @@ main() {
   install_github_cli
   install_claude_code
   install_claude_desktop
+  install_dropbox
+  install_obsidian
   setup_whatsapp
 
   summary

@@ -1,8 +1,9 @@
 # Ubuntu provisioning
 
 Scripts to take a fresh Ubuntu box to a working desktop — vim, Telegram,
-Signal, GitHub CLI, Claude Code, and Claude Desktop — using only official,
-signed sources.
+Signal, 1Password, GitHub CLI, Claude Code, Claude Desktop, Dropbox and
+Obsidian — using official, signed sources wherever the vendor offers them, and
+saying so plainly where one does not.
 
 The design goal is **auditability over convenience**. Everything here should be
 something you can verify yourself, update through one channel, and reason about
@@ -33,6 +34,8 @@ Read the script before you pipe it into a shell. That goes for this one too.
 | GitHub CLI | `cli.github.com` | GitHub's own signed repo; Ubuntu's `gh` lags badly on LTS |
 | Claude Code | `claude.ai/install.sh` | Anthropic's native installer; self-updating binary |
 | Claude Desktop | `downloads.claude.ai` | Anthropic's signed apt repo (Linux beta) |
+| Dropbox | `linux.dropbox.com/ubuntu` | Dropbox's own signed apt repo, indexed per Ubuntu codename |
+| Obsidian | GitHub releases (`obsidianmd/obsidian-releases`) | No apt repo exists — see [Obsidian: the exception](#obsidian-the-exception) |
 | Ubuntu Pro | `ubuntu.com/pro` | Free personal tier; the only source of Canonical security updates for `universe` |
 | WhatsApp | your browser | Meta ships no Linux client — see [WHATSAPP_ALTERNATIVES.md](WHATSAPP_ALTERNATIVES.md) |
 | Caps Lock as Control | XKB `ctrl:nocaps` | No extra package and no input daemon; applies per seat, so Bluetooth keyboards get it too |
@@ -148,8 +151,12 @@ session ends.
 ### Official sources only
 
 Every apt repository here is run by the vendor whose software it serves:
-Canonical, Signal, GitHub, Anthropic. No PPAs from individuals, no third-party
-rebuilds, no "trusted" mirrors.
+Canonical, Signal, GitHub, Anthropic, 1Password, Dropbox. No PPAs from
+individuals, no third-party rebuilds, no "trusted" mirrors.
+
+Where a vendor runs no repository at all, the package still comes from that
+vendor's own build — never a repackager's. Obsidian is the only case, and it
+gets [its own section](#obsidian-the-exception) rather than a footnote.
 
 ### Keys pinned by fingerprint
 
@@ -161,6 +168,8 @@ that hostname. The scripts verify each key against a fingerprint hardcoded in
 Anthropic    31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE
 Signal       DBA36B5181D0C816F630E889D980A17457F6FB06
 GitHub CLI   2C6106201985B60E6C7AC87323F3D4EA75716059
+1Password    3FEF9748469ADBE15DA7CA80AC2D62742012EA22
+Dropbox      1C61A2656FB57B7E4DE0F4C1FC918B335044912E
 ```
 
 Verify them yourself against the vendors' own documentation:
@@ -168,6 +177,16 @@ Verify them yourself against the vendors' own documentation:
 - Anthropic — <https://code.claude.com/docs/en/setup#binary-integrity-and-code-signing>
 - Signal — <https://signal.org/download/linux/>
 - GitHub CLI — <https://github.com/cli/cli/blob/trunk/docs/install_linux.md>
+- 1Password — <https://support.1password.com/install-linux/#debian-or-ubuntu>
+
+Dropbox is the awkward one: it documents a keyserver fetch rather than a
+fingerprint, and publishes the key itself only under its Fedora path. The pin
+above is checkable against the Ubuntu archive it actually signs:
+
+```bash
+curl -fsSL https://linux.dropbox.com/ubuntu/dists/noble/Release.gpg \
+  | gpg --list-packets | grep 'issuer fpr'
+```
 
 You can check any of them without running the scripts:
 
@@ -191,7 +210,50 @@ other repo. The deprecated `apt-key add` pattern — which trusts a key for
 `snapd` runs a root daemon, auto-updates on its own schedule, and offers
 confinement that most desktop apps opt out of anyway. Its update path is opaque:
 you cannot easily pin a version or defer a refresh. Everything here installs as
-a `.deb` from a signed repo, or as a user-owned binary under `~/.local`.
+a `.deb` — from a signed repo wherever one exists — or as a user-owned binary
+under `~/.local`.
+
+### Dropbox: what apt actually installs
+
+The signed repo is genuine, but the `dropbox` package is only the launcher and
+the Nautilus extension. The sync engine itself is proprietary and is downloaded
+into `~/.dropbox-dist` the first time you run `dropbox start -i` — outside apt,
+after provisioning has finished.
+
+That download *is* signature-checked, but only when `python3-gpg` can be
+imported. Without it the launcher prints "we will not be able to verify binary
+signatures" and installs the daemon anyway. The package merely `Suggests:` it,
+so `install_dropbox` installs `python3-gpg` explicitly rather than leave the
+only check on that binary silently switched off.
+
+### Obsidian: the exception
+
+Obsidian is the one thing here that no signed channel can deliver, and it is
+worth stating rather than burying:
+
+- There is **no Obsidian apt repository**. Every Linux artifact is a plain file
+  on a GitHub release: no detached signature, no published checksum.
+- Their own [download page](https://obsidian.md/download) labels the Flathub
+  build **"Community maintained"**, so the Flatpak is not a first-party
+  artifact either — and the snap is out under the rule above.
+- That leaves the official `.deb` (amd64 only) as the only first-party package
+  apt can install. `install_obsidian` resolves the newest one from the releases
+  API, records its SHA-256 under
+  `~/.local/share/dotfiles-provisioning/obsidian.sha256`, and installs it with
+  `apt-get install ./file.deb` so dependencies resolve.
+
+The recorded checksum proves nothing about the download it describes — there is
+nothing upstream to compare it to. It makes the *next* one comparable, on this
+box or another.
+
+The real cost is the update path: **apt will never upgrade Obsidian.** The app
+updates its own JavaScript layer in place, but the Electron shell underneath —
+the browser engine you actually want patched — only moves when a new package is
+installed. Re-running either provisioning script does that; nothing else will.
+
+If that trade is not acceptable, the honest alternative is the Flatpak, which
+does auto-update. It is community-built, by Obsidian's own labelling, which is
+the trade in the other direction.
 
 ### Minimal privilege
 
@@ -205,12 +267,15 @@ a `.deb` from a signed repo, or as a user-owned binary under `~/.local`.
 ### One update path
 
 ```bash
-sudo apt update && sudo apt upgrade    # Signal, Telegram, gh, Claude Desktop
+sudo apt update && sudo apt upgrade    # Signal, Telegram, gh, Dropbox, Claude Desktop
 claude update                          # Claude Code (also self-updates)
+./provision.sh                         # Obsidian — nothing else will upgrade it
 ```
 
-Everything except Claude Code flows through apt. That is the point: one command
-tells you what is stale, and one command fixes it.
+Everything except Claude Code and Obsidian flows through apt. That is the point:
+one command tells you what is stale, and one command fixes it. Obsidian is
+carved out for the reasons above, and it is the only thing here you have to
+remember separately.
 
 ## Homebrew coexistence
 
@@ -273,7 +338,11 @@ independently, that is information about the vendor.
 ```bash
 SKIP_DESKTOP=1 SKIP_SIGNAL=1 ./provision-minimal.sh    # headless box
 SKIP_KEYBOARD=1 ./provision-minimal.sh                 # leave Caps Lock alone
+SKIP_DROPBOX=1 SKIP_OBSIDIAN=1 ./provision-minimal.sh  # no GUI apps
 ```
+
+The full set: `SKIP_DESKTOP`, `SKIP_SIGNAL`, `SKIP_1PASSWORD`, `SKIP_TELEGRAM`,
+`SKIP_GH`, `SKIP_DROPBOX`, `SKIP_OBSIDIAN`, `SKIP_KEYBOARD`.
 
 ## Keyboard: Caps Lock as Control
 
@@ -326,6 +395,12 @@ apt-cache policy signal-desktop
 
 # Confirm nothing arrived via snap
 snap list 2>/dev/null || echo "snapd not installed — good"
+
+# Obsidian is not in any repo — this is the record of what was installed
+cat ~/.local/share/dotfiles-provisioning/obsidian.sha256
+
+# Dropbox's daemon lives outside apt entirely
+ls ~/.dropbox-dist 2>/dev/null || echo "daemon not fetched yet — run: dropbox start -i"
 ```
 
 ## Troubleshooting
