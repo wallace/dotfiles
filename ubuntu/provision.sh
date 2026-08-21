@@ -30,6 +30,7 @@ UBUNTU_PRO_CHOICE="" # attached state, reported in the summary
 KEYBOARD_CHOICE=""   # Caps Lock remap outcome, reported in the summary
 EMOJI_FONT_CHOICE="" # ibus emoji picker font, reported in the summary
 EMOJI_HOTKEY_CHOICE="" # ibus emoji hotkey split, reported in the summary
+EMOJI_EXT_CHOICE=""  # Emoji Copy extension presence, reported in the summary
 
 # Reuse the installer functions from the minimal script by sourcing the parts
 # we need. They are duplicated here rather than extracted so each script stays
@@ -71,11 +72,19 @@ setup_keyboard() {
 }
 
 # Prepares emoji input for the Emoji Copy shell extension
-# (extensions.gnome.org/extension/6242), which is installed by hand:
+# (extensions.gnome.org/extension/6242):
 #
 #   1. Points the ibus picker at a colour font; it ships 'Monospace 16'.
 #   2. Drops Super+. from the ibus hotkey list, leaving Super+;, so the
 #      extension can take Super+. for itself.
+#   3. Reports whether the extension is actually there.
+#
+# Installing it is deliberately left to the user, for the same reason
+# setup_ubuntu_pro is: extensions.gnome.org signs nothing, so there is no
+# fingerprint to pin the way every apt source here does. A shell extension also
+# runs inside gnome-shell with full user privileges and no sandbox, which is a
+# choice worth making once by hand rather than silently on every provision.
+# Pinning a version would fight the extension's own auto-updates besides.
 setup_emoji_input() {
   step "Emoji: colour font for ibus, and freeing Super+. for the shell extension"
 
@@ -155,6 +164,26 @@ setup_emoji_input() {
       EMOJI_HOTKEY_CHOICE="left as $cur"
       ok "custom emoji hotkeys set — leaving them alone" ;;
   esac
+
+  # --- 3. Is the extension actually installed? ---
+
+  # Nothing above is much use on its own: the font only dresses up the fallback
+  # picker, and freeing Super+. leaves the chord dead until something claims it.
+  local uuid="emoji-copy@felipeftn" state
+  if ! have gnome-extensions; then
+    EMOJI_EXT_CHOICE="unknown (no gnome-extensions command)"
+  elif state="$(gnome-extensions info "$uuid" 2>/dev/null | sed -n 's/^ *State: *//p')"; then
+    if [ -n "$state" ]; then
+      EMOJI_EXT_CHOICE="installed ($state)"
+      ok "Emoji Copy present — $state"
+    else
+      EMOJI_EXT_CHOICE="not installed"
+      warn "Emoji Copy is not installed; Super+. does nothing until it is."
+    fi
+  else
+    EMOJI_EXT_CHOICE="not installed"
+    warn "Emoji Copy is not installed; Super+. does nothing until it is."
+  fi
 
   return 0
 }
@@ -723,6 +752,7 @@ ${C_GREEN}───────────────────────�
   caps lock        ${KEYBOARD_CHOICE:-not configured}
   emoji font       ${EMOJI_FONT_CHOICE:-not configured}
   emoji hotkey     ${EMOJI_HOTKEY_CHOICE:-not configured}
+  emoji picker     ${EMOJI_EXT_CHOICE:-not checked}
   ubuntu pro       ${UBUNTU_PRO_CHOICE:-not checked}
   telegram         ${TELEGRAM_CHOICE:-not configured}
   signal           $(have signal-desktop && echo 'installed' || echo 'not installed')
@@ -748,6 +778,9 @@ Next steps:
   2. Run 'claude' and sign in.
   3. Launch Claude Desktop from your app launcher, or run 'claude-desktop'.
   4. Run 'dropbox start -i' to fetch and start the sync daemon, then sign in.
+  5. Install the Emoji Copy extension for Super+. (extension 6242):
+     open Extension Manager and search "Emoji Copy", then enable
+     "Paste on Select" in its preferences. Not scripted: e.g.o signs nothing.
 
 Updates:
   Signal, 1Password, Dropbox, gh    ->  sudo apt update && sudo apt upgrade
