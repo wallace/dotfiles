@@ -37,6 +37,10 @@ brew "msmtp"
 # Backups of ~/.mail. Once old mail is deleted from Gmail to reclaim Google
 # storage, the local Maildir stops having a second copy anywhere.
 brew "restic"
+# Google Drive backups (drive-backup). Photos deliberately does NOT go through
+# rclone -- the Photos API strips EXIF location and will not serve originals,
+# so that one has to come from Takeout.
+brew "rclone"
 
 # macOS only (no Linux bottles available)
 if OS.mac?
