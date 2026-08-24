@@ -9,6 +9,10 @@ export PATH="$HOME/.local/bin:$PATH"
 export PATH="$HOME/.rbenv/shims:$PATH"
 export PATH="$HOME/.nodenv/shims:$PATH"
 export PATH="/opt/homebrew/opt/mysql@5.7/bin:$PATH"
+# restic repository for mail-backup, on the T9 external drive. The script exits
+# cleanly when the drive is not plugged in, so this is safe to always export.
+export MAIL_BACKUP_REPO="/run/media/$USER/T9/mail-restic"
+
 export GOPATH="$HOME/go"
 export PATH="$PATH:${GOPATH}/bin"
 export PYENV_ROOT="$HOME/.pyenv"
