@@ -34,6 +34,9 @@ brew "libsecret"
 brew "notmuch"
 brew "isync"
 brew "msmtp"
+# Backups of ~/.mail. Once old mail is deleted from Gmail to reclaim Google
+# storage, the local Maildir stops having a second copy anywhere.
+brew "restic"
 
 # macOS only (no Linux bottles available)
 if OS.mac?

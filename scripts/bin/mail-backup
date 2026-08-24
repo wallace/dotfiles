@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+#
+# mail-backup
+#
+# Snapshot ~/.mail into a restic repository, normally on an external drive.
+#
+# Why restic and not a tarball: snapshots are deduplicated and incremental, so
+# only changed data moves after the first run, and `restic check` can prove the
+# repository is still readable. A backup nobody has verified is not a backup.
+#
+# Why this matters here specifically: Gmail is currently the second copy of
+# this mail. Once old messages are deleted server-side to reclaim Google
+# storage, ~/.mail becomes the only copy, and it lives on a single NVMe.
+#
+# Configuration:
+#   MAIL_BACKUP_REPO  restic repository path (required), e.g.
+#                     /media/$USER/backup/mail-restic
+#
+# The repository password lives in the login keyring beside the Gmail one:
+#
+#   secret-tool store --label='restic (mail backup)' service restic repo mail
+#
+# Keep a copy of that password in 1Password as well. It is the encryption key:
+# lose it and the backup is unrecoverable, keyring or not.
+
+set -euo pipefail
+
+repo="${MAIL_BACKUP_REPO:-}"
+if [ -z "$repo" ]; then
+    echo "mail-backup: MAIL_BACKUP_REPO is unset (e.g. /media/$USER/<drive>/mail-restic)" >&2
+    exit 64  # EX_USAGE
+fi
+if [ ! -d "$repo" ]; then
+    echo "mail-backup: $repo not found -- is the external drive plugged in?" >&2
+    exit 69  # EX_UNAVAILABLE
+fi
+
+# Share mailsync's lock. mbsync runs every five minutes and rewrites the very
+# tree being read here; taking the same lock means a snapshot never races a
+# sync, so it captures a coherent point in time rather than a half-written one.
+exec 9>"${XDG_RUNTIME_DIR:-/tmp}/mailsync.lock"
+if ! flock -w 900 9; then
+    echo "mail-backup: a sync held the lock for 15 minutes; try again later" >&2
+    exit 75  # EX_TEMPFAIL
+fi
+
+export RESTIC_REPOSITORY="$repo"
+export RESTIC_PASSWORD_COMMAND="secret-tool lookup service restic repo mail"
+
+restic backup "$HOME/.mail" --tag mail --verbose
+
+# Keep a deep ladder rather than a few days. This is an archive: the failure
+# mode worth defending against is quiet corruption or an accidental mass
+# delete noticed weeks later, not a bad file from yesterday.
+restic forget --tag mail \
+    --keep-daily 14 --keep-weekly 8 --keep-monthly 24 --prune
+
+# Structural check every run; re-read a sample of actual data so bit-rot on the
+# backup drive surfaces on its own rather than at restore time.
+restic check --read-data-subset=2%
