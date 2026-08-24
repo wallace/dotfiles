@@ -74,12 +74,28 @@ Create Both
 SyncState *
 Expunge Near
 
+# The archive is append-only, so that deleting mail in Gmail to reclaim Google
+# storage does not take the local copy with it.
+#
+# `Sync Full` (the default) expands to "New Upgrade Gone Flags", and Gone is
+# what propagates disappearances: a Gmail-side delete expunges the message from
+# All Mail, mbsync sees it vanish, and Expunge Near then removes it from disk --
+# within five minutes, silently. Dropping Gone severs exactly that path.
+#
+# New and Flags are kept, and since specifying no direction means both
+# directions, arrivals and flag changes still sync each way: read/unread and
+# starred stay in step with Gmail.
+#
+# Expunge None is the second lock. Deleted is itself a flag, so a client that
+# marks a message deleted in All Mail without expunging it could still reach us
+# through Flags; with nothing ever expunged locally, that cannot remove a file.
 Channel gmail-archive
 Far :gmail-remote:"[Gmail]/All Mail"
 Near :gmail-local:archive
 Create Both
 SyncState *
-Expunge Near
+Sync New Flags
+Expunge None
 
 # `mbsync gmail` does everything; `mbsync gmail-inbox` does just the inbox.
 # Sync the inbox first -- All Mail is the entire account history and the cold
