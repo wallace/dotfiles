@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+#
+# drive-backup
+#
+# Copy Google Drive down to the external drive.
+#
+# `rclone copy`, deliberately not `rclone sync`. sync mirrors deletions, which
+# would defeat the whole purpose: the point is to delete from Google to reclaim
+# storage while keeping the local copy. copy only ever adds and updates. This
+# is the same reasoning that made the mail archive channel drop mbsync's Gone
+# operation -- a backup that faithfully reproduces your deletions is not a
+# backup.
+#
+# Google-native files (Docs, Sheets, Slides) have no bytes to download, so they
+# are exported to Office formats on the way out. Without this rclone skips them
+# and the backup silently omits every document you actually wrote.
+#
+# Configuration:
+#   DRIVE_BACKUP_REMOTE  rclone remote name (default: gdrive:)
+#   DRIVE_BACKUP_DEST    destination directory (default: T9/gdrive)
+#
+# Set the remote up once with `rclone config` -- it needs a browser for OAuth.
+
+set -euo pipefail
+
+remote="${DRIVE_BACKUP_REMOTE:-gdrive:}"
+dest="${DRIVE_BACKUP_DEST:-/run/media/$USER/T9/gdrive}"
+parent=$(dirname "$dest")
+
+if [ ! -d "$parent" ]; then
+    echo "drive-backup: $parent not found -- is the external drive plugged in?" >&2
+    exit 69  # EX_UNAVAILABLE
+fi
+if ! rclone listremotes | grep -qx "$remote"; then
+    echo "drive-backup: remote '$remote' is not configured; run: rclone config" >&2
+    exit 78  # EX_CONFIG
+fi
+
+mkdir -p "$dest"
+log="$dest/.drive-backup.log"
+
+# --fast-list trades memory for far fewer API calls on a large Drive, which
+# matters because Google rate-limits per-request rather than per-byte.
+# --drive-acknowledge-abuse stops the run aborting on files Google has flagged;
+# they are still yours and still worth keeping.
+rclone copy "$remote" "$dest" \
+    --drive-export-formats docx,xlsx,pptx,svg,pdf \
+    --drive-acknowledge-abuse \
+    --fast-list \
+    --transfers 8 \
+    --checkers 16 \
+    --retries 5 \
+    --log-file "$log" \
+    --log-level INFO \
+    --stats 30s \
+    --progress
+
+echo
+echo "drive-backup: done. Log: $log"
+rclone size "$dest" 2>/dev/null || true
