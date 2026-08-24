@@ -17,7 +17,8 @@
 #
 # Configuration:
 #   DRIVE_BACKUP_REMOTE  rclone remote name (default: gdrive:)
-#   DRIVE_BACKUP_DEST    destination directory (default: T9/gdrive)
+#   DRIVE_BACKUP_DEST    staging directory (default: T9/gdrive)
+#   MAIL_BACKUP_REPO     restic repository -- shared with mail-backup
 #
 # Set the remote up once with `rclone config` -- it needs a browser for OAuth.
 
@@ -61,6 +62,32 @@ rclone copy "$remote" "$dest" \
 # omitted 170 objects, 27 of them verified to differ in content from the copy
 # that was kept. drive-dupes fetches those by file ID.
 drive-dupes || echo "drive-backup: duplicate pass failed; see above" >&2
+
+# Snapshot the staging copy into restic. The plain tree above stays -- it is
+# what rclone diffs against next run, so re-copying 2.6 GB is avoided -- but
+# plain files on a portable drive are readable by whoever picks it up, carry no
+# history, and cannot be verified. restic supplies all three.
+#
+# Same repository as mail, distinguished by tag: content is deduplicated across
+# both, one key unlocks both, and one `restic check` covers both. Retention is
+# tag-scoped on each side, so neither prunes the other's snapshots.
+if [ -n "${MAIL_BACKUP_REPO:-}" ] && [ -d "${MAIL_BACKUP_REPO}" ]; then
+    echo
+    echo "drive-backup: snapshotting into restic..."
+    export RESTIC_REPOSITORY="$MAIL_BACKUP_REPO"
+    export RESTIC_PASSWORD_COMMAND="secret-tool lookup service restic repo mail"
+
+    # The log is excluded deliberately: it is rewritten every run and would add
+    # a fresh copy to each snapshot while telling you nothing a snapshot does
+    # not already record.
+    restic backup "$dest" --tag drive --exclude "$log"
+
+    restic forget --tag drive \
+        --keep-daily 14 --keep-weekly 8 --keep-monthly 24 --prune
+    restic check
+else
+    echo "drive-backup: MAIL_BACKUP_REPO unset or missing; skipping restic" >&2
+fi
 
 echo
 echo "drive-backup: done. Log: $log"
