@@ -1,0 +1,166 @@
+#!/usr/bin/env python3
+"""Copy Gmail labels and categories into notmuch tags.
+
+IMAP does not deliver Gmail's labels: every message mbsync writes to disk
+arrives with no record of which labels it carried, and no amount of local
+processing can reconstruct them. That information exists only on Google's
+servers, which makes this a one-way door -- once messages are deleted from
+Gmail to reclaim storage, their labels are unrecoverable.
+
+Gmail does expose the mapping through the IMAP extension X-GM-RAW, which
+accepts Gmail's own search syntax. This walks each label and category, resolves
+the matches to Message-IDs, and applies them to the local notmuch database.
+
+The result is better than the X-Gmail-Labels header a Takeout export carries,
+which no mail client reads: as notmuch tags these are live queries, so
+`tag:gmail/2020-taxes` works in neomutt today.
+
+Tags are prefixed (default "gmail/") so a Gmail label named "inbox", "unread"
+or "attachment" cannot collide with the tags notmuch maintains itself.
+
+Re-running is safe -- applying a tag a message already has is a no-op. Note it
+only adds: a label removed in Gmail after a previous run leaves its tag behind.
+
+Usage:
+    mail-labels                 # every label, category, and is:important
+    mail-labels --dry-run       # report counts, change nothing
+    mail-labels --skip-important
+"""
+
+import argparse
+import imaplib
+import re
+import subprocess
+import sys
+
+ACCOUNT = "jonathan.wallace@gmail.com"
+IMAP_HOST = "imap.gmail.com"
+
+# Gmail's category tabs. These are not labels and never appear in a folder
+# listing, so they have to be named explicitly.
+CATEGORIES = ["promotions", "social", "updates", "forums", "primary"]
+
+# Folders that are views onto other mail rather than labels worth preserving.
+# Sent/Drafts/Starred are already implied by the local Maildir layout.
+SKIP_FOLDERS = {
+    "INBOX", "[Gmail]", "[Gmail]/All Mail", "[Gmail]/Drafts",
+    "[Gmail]/Sent Mail", "[Gmail]/Starred", "[Gmail]/Spam",
+    "[Gmail]/Trash", "[Gmail]/Important",
+}
+
+MSGID_RE = re.compile(rb"<([^>]+)>")
+LIST_RE = re.compile(r'\(([^)]*)\) "([^"]*)" (.*)')
+
+
+def password():
+    return subprocess.check_output(
+        ["secret-tool", "lookup", "account", ACCOUNT, "server", IMAP_HOST]
+    ).decode()
+
+
+def custom_labels(imap):
+    """Every user-created label, i.e. folders that are not Gmail's own."""
+    typ, data = imap.list()
+    if typ != "OK":
+        return []
+    names = []
+    for row in data:
+        match = LIST_RE.match(row.decode())
+        if not match:
+            continue
+        name = match.group(3).strip('"')
+        if name not in SKIP_FOLDERS:
+            names.append(name)
+    return sorted(names)
+
+
+def search(imap, query):
+    """UIDs in All Mail matching a Gmail search expression."""
+    typ, data = imap.uid("SEARCH", "X-GM-RAW", f'"{query}"')
+    if typ != "OK" or not data or not data[0]:
+        return []
+    return data[0].split()
+
+
+def message_ids(imap, uids, batch=500):
+    """Resolve UIDs to Message-IDs, which is how notmuch addresses a message.
+
+    Batched because a single FETCH of tens of thousands of UIDs builds a
+    command line the server will reject, and headers-only keeps it cheap.
+    """
+    found = []
+    for i in range(0, len(uids), batch):
+        chunk = b",".join(uids[i:i + batch]).decode()
+        typ, data = imap.uid(
+            "FETCH", chunk, "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])"
+        )
+        if typ != "OK":
+            continue
+        for item in data:
+            if isinstance(item, tuple) and len(item) > 1:
+                match = MSGID_RE.search(item[1])
+                if match:
+                    found.append(match.group(1).decode(errors="replace"))
+    return found
+
+
+def apply_tags(tag, ids):
+    """Hand the whole set to `notmuch tag --batch` in one go.
+
+    One `notmuch tag` process per message would fork tens of thousands of
+    times; batch mode reads commands on stdin and opens the database once.
+    Unknown Message-IDs simply match nothing, so messages that only ever
+    existed in Trash are harmless.
+    """
+    if not ids:
+        return
+    script = "".join(
+        f'+{tag} -- id:"{mid}"\n' for mid in ids if '"' not in mid
+    )
+    subprocess.run(
+        ["notmuch", "tag", "--batch"], input=script.encode(), check=True
+    )
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--prefix", default="gmail/",
+                        help="tag prefix (default: gmail/)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="report what would be tagged, change nothing")
+    parser.add_argument("--skip-important", action="store_true",
+                        help="skip is:important, the slowest and least useful")
+    args = parser.parse_args()
+
+    imap = imaplib.IMAP4_SSL(IMAP_HOST)
+    imap.login(ACCOUNT, password())
+    imap.select('"[Gmail]/All Mail"', readonly=True)
+
+    jobs = [(label, f"label:{label}") for label in custom_labels(imap)]
+    jobs += [(cat, f"category:{cat}") for cat in CATEGORIES]
+    if not args.skip_important:
+        jobs.append(("important", "is:important"))
+
+    total = 0
+    for name, query in jobs:
+        uids = search(imap, query)
+        if not uids:
+            print(f"  {name:<30} 0 messages, skipped")
+            continue
+        tag = args.prefix + name.replace(" ", "-")
+        if args.dry_run:
+            print(f"  {name:<30} {len(uids):>6} messages -> {tag} (dry run)")
+            continue
+        ids = message_ids(imap, uids)
+        apply_tags(tag, ids)
+        total += len(ids)
+        print(f"  {name:<30} {len(uids):>6} messages -> {tag}"
+              f" ({len(ids)} resolved)")
+
+    imap.logout()
+    print(f"\n{'would tag' if args.dry_run else 'tagged'} {total} messages")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
