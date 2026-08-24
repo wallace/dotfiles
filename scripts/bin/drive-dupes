@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+"""Fetch the Google Drive files that a plain `rclone copy` cannot.
+
+Drive allows several distinct files to share one name inside one folder; a
+filesystem does not. rclone resolves that by keeping the first and logging
+"Duplicate object found in source - ignoring" for the rest, so a normal copy
+silently omits them -- 170 objects on this account, 27 of which were verified
+to differ in content from the copy that was kept.
+
+Those extras are only reachable by file ID, which is what `rclone backend
+copyid` takes. Each is written beside its twin with a .dupN suffix, so the
+names stay recognisable and nothing overwrites anything.
+
+Deduplicating on the Drive side with `rclone dedupe` would be the tidier fix,
+but it requires write access, and the backup remote is deliberately read-only.
+
+Usage:
+    drive-dupes [--dry-run]
+"""
+
+import argparse
+import collections
+import json
+import os
+import subprocess
+import sys
+
+REMOTE = os.environ.get("DRIVE_BACKUP_REMOTE", "gdrive:")
+DEST = os.environ.get(
+    "DRIVE_BACKUP_DEST", f"/run/media/{os.environ.get('USER','')}/T9/gdrive"
+)
+EXPORT_FORMATS = "docx,xlsx,pptx,svg,pdf"
+
+
+def listing():
+    out = subprocess.run(
+        ["rclone", "lsjson", "-R", "--files-only", REMOTE],
+        capture_output=True, check=True,
+    ).stdout
+    return json.loads(out)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--dry-run", action="store_true")
+    args = ap.parse_args()
+
+    if not os.path.isdir(DEST):
+        print(f"drive-dupes: {DEST} not found -- drive plugged in?", file=sys.stderr)
+        return 69
+
+    groups = collections.defaultdict(list)
+    for row in listing():
+        groups[row["Path"]].append(row)
+
+    dupes = {p: v for p, v in groups.items() if len(v) > 1}
+    if not dupes:
+        print("drive-dupes: no duplicate names; nothing to do")
+        return 0
+
+    extra = sum(len(v) - 1 for v in dupes.values())
+    print(f"{len(dupes)} duplicated names, {extra} extra copies to fetch")
+
+    fetched = failed = 0
+    for path, rows in sorted(dupes.items()):
+        stem, ext = os.path.splitext(os.path.basename(path))
+        subdir = os.path.join(DEST, os.path.dirname(path))
+        # rclone kept rows[0] during the main copy; everything after it is
+        # what went missing.
+        for n, row in enumerate(rows[1:], start=1):
+            target = f"{stem}.dup{n}{ext}"
+            if args.dry_run:
+                print(f"  would fetch {path} -> {target}")
+                fetched += 1
+                continue
+            os.makedirs(subdir, exist_ok=True)
+            res = subprocess.run(
+                ["rclone", "backend", "copyid", REMOTE,
+                 "--drive-export-formats", EXPORT_FORMATS,
+                 row["ID"], os.path.join(subdir, target)],
+                capture_output=True, text=True,
+            )
+            if res.returncode == 0:
+                fetched += 1
+            else:
+                failed += 1
+                print(f"  FAILED {path}: {res.stderr.strip()[:90]}")
+
+    verb = "would fetch" if args.dry_run else "fetched"
+    print(f"\n{verb} {fetched} extra copies" +
+          (f", {failed} failed" if failed else ""))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

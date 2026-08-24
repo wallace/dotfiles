@@ -55,6 +55,13 @@ rclone copy "$remote" "$dest" \
     --stats 30s \
     --progress
 
+# Second pass. Drive lets distinct files share a name inside one folder and a
+# filesystem does not, so rclone keeps the first and logs "Duplicate object
+# found in source - ignoring" for the rest. On this account that silently
+# omitted 170 objects, 27 of them verified to differ in content from the copy
+# that was kept. drive-dupes fetches those by file ID.
+drive-dupes || echo "drive-backup: duplicate pass failed; see above" >&2
+
 echo
 echo "drive-backup: done. Log: $log"
 rclone size "$dest" 2>/dev/null || true
