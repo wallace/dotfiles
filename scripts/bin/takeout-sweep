@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+#
+# takeout-sweep
+#
+# Move completed Google Takeout archives out of ~/Downloads onto the external
+# drive, so a multi-part export cannot fill the root filesystem.
+#
+# This is not hypothetical: root sits at ~90% before an export starts, and a
+# Photos Takeout arrives as several GB-sized parts downloaded concurrently.
+#
+# Deciding when a download is "complete" is the whole problem. Firefox writes
+# `NAME.gt-XXXXXX.tgz.part` while transferring AND creates a zero-byte `NAME.tgz`
+# placeholder up front, so the presence of a plausibly-named .tgz proves
+# nothing. A file is treated as finished only when all of:
+#
+#   * it is non-empty
+#   * no sibling .part/.crdownload for the same base name exists
+#   * its size is unchanged across two samples
+#
+# Transfers use rsync --remove-source-files, which deletes the source only
+# after the copy is verified. A plain mv across filesystems can leave a
+# truncated file behind if it fails midway -- unacceptable when the source is
+# about to be deleted and the archive may be the only copy.
+#
+#   takeout-sweep            # watch continuously
+#   takeout-sweep --once     # single pass, for a timer or manual run
+
+set -euo pipefail
+
+src="${TAKEOUT_SRC:-$HOME/Downloads}"
+dst="${TAKEOUT_DEST:-/run/media/$USER/T9/takeout}"
+interval="${TAKEOUT_INTERVAL:-20}"
+once=false
+[ "${1:-}" = "--once" ] && once=true
+
+[ -d "$dst" ] || { echo "takeout-sweep: $dst missing -- drive plugged in?" >&2; exit 69; }
+
+stable_and_done() {
+    local f=$1 base size1 size2
+    base=${f%.tgz}; base=${base%.tar.gz}; base=${base%.zip}
+    # Any in-progress sibling means the browser is still working on this part.
+    compgen -G "${base}*.part" >/dev/null && return 1
+    compgen -G "${base}*.crdownload" >/dev/null && return 1
+    size1=$(stat -c %s "$f" 2>/dev/null || echo 0)
+    [ "$size1" -gt 0 ] || return 1
+    sleep 5
+    size2=$(stat -c %s "$f" 2>/dev/null || echo 0)
+    [ "$size1" = "$size2" ]
+}
+
+sweep() {
+    shopt -s nullglob
+    for f in "$src"/*akeout*.tgz "$src"/*akeout*.tar.gz "$src"/*akeout*.zip; do
+        [ -f "$f" ] || continue
+        stable_and_done "$f" || continue
+
+        local need avail name
+        name=$(basename "$f")
+        need=$(( $(stat -c %s "$f") / 1024 ))
+        avail=$(df -Pk "$dst" | awk 'NR==2 {print $4}')
+        if [ "$need" -ge "$avail" ]; then
+            echo "SKIP $name -- not enough room on $dst"
+            continue
+        fi
+
+        echo "MOVING $name ($(numfmt --to=iec --suffix=B "$(stat -c %s "$f")"))"
+        if rsync -a --remove-source-files "$f" "$dst/"; then
+            echo "MOVED $name -> $dst  (root now $(df -h / | awk 'NR==2 {print $4}') free)"
+        else
+            echo "FAILED $name -- source kept"
+        fi
+    done
+    shopt -u nullglob
+}
+
+if $once; then
+    sweep
+else
+    echo "takeout-sweep: watching $src -> $dst (every ${interval}s)"
+    while true; do
+        sweep
+        sleep "$interval"
+    done
+fi
