@@ -15,12 +15,15 @@
 # Usage:
 #   ./harden-ssh.sh                                  # keys only, SSH open to any source
 #   SSH_ALLOW_FROM=192.168.1.0/24 ./harden-ssh.sh    # SSH reachable from the LAN only
+#   SSH_ALLOW_FROM="100.64.0.0/10 192.168.1.0/24" ./harden-ssh.sh   # tailnet or LAN
 #   SSH_PASSWORD_AUTH=yes ./harden-ssh.sh            # also accept passwords
 #
 # Environment overrides:
-#   SSH_ALLOW_FROM=<cidr>    restrict SSH to this source. Unset means anywhere,
-#                            which on a routable address means the whole internet.
-#                            Must name a network, not a host inside one:
+#   SSH_ALLOW_FROM=<cidr>    restrict SSH to these sources. Space-separated for
+#                            more than one, like SSH_ALLOW_USERS; each gets its
+#                            own ufw rule. Unset means anywhere, which on a
+#                            routable address means the whole internet.
+#                            Each must name a network, not a host inside one:
 #                            192.168.1.5/24 is refused, because the mask turns
 #                            it into all of 192.168.1.0/24.
 #   SSH_PASSWORD_AUTH=yes    accept passwords as well as keys. Default no.
@@ -86,7 +89,12 @@ validate_inputs() {
   esac
 
   if [ -n "$SSH_ALLOW_FROM" ]; then
-    validate_cidr "$SSH_ALLOW_FROM"
+    local c
+    # Deliberately unquoted: SSH_ALLOW_FROM is a space-separated list.
+    # shellcheck disable=SC2086
+    for c in $SSH_ALLOW_FROM; do
+      validate_cidr "$c"
+    done
   fi
 }
 
@@ -162,6 +170,39 @@ validate_cidr() {
      ufw would widen this to $(( (net >> 24) & 255 )).$(( (net >> 16) & 255 )).$(( (net >> 8) & 255 )).$(( net & 255 ))/$prefix.
      Write that if you meant the block, or $addr/32 if you meant the one host."
   fi
+}
+
+# Is an IPv4 address inside an IPv4 CIDR?
+#
+#   0  yes        1  no        2  cannot tell from arithmetic (IPv6 either side)
+#
+# The third answer matters: the caller uses this to decide whether enabling the
+# firewall would cut off the session running the script, and "I don't know" has
+# to stay distinguishable from "no" or somebody gets disconnected on a guess.
+ip_in_cidr() {
+  local ip="$1" cidr="$2" net prefix n
+  case "$ip$cidr" in *:*) return 2 ;; esac
+
+  net="${cidr%%/*}"; prefix="${cidr#*/}"
+  case "$prefix" in ''|*[!0-9]*) return 2 ;; esac
+  [ "$prefix" -le 32 ] || return 2
+
+  local -a a=() b=()
+  local IFS=.
+  read -r -a a <<< "$ip"
+  read -r -a b <<< "$net"
+  unset IFS
+  [ "${#a[@]}" -eq 4 ] && [ "${#b[@]}" -eq 4 ] || return 2
+  for n in "${a[@]}" "${b[@]}"; do
+    case "$n" in ''|*[!0-9]*) return 2 ;; esac
+    [ "$n" -le 255 ] || return 2
+  done
+
+  local ipv=$(( (a[0] << 24) | (a[1] << 16) | (a[2] << 8) | a[3] ))
+  local netv=$(( (b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3] ))
+  local mask=0
+  [ "$prefix" -gt 0 ] && mask=$(( (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF ))
+  [ $(( ipv & mask )) -eq $(( netv & mask )) ]
 }
 
 # --- Key-auth preflight ----------------------------------------------------
@@ -366,9 +407,39 @@ check_not_locking_ourselves_out() {
   client_ip="$(printf '%s' "$SSH_CONNECTION" | awk '{print $1}')"
   [ -n "$client_ip" ] || return 0
 
+  # Work the answer out rather than asking someone to eyeball it. That was
+  # always a bit much to ask, and it gets worse now SSH_ALLOW_FROM can hold
+  # several blocks: "is 192.168.50.14 inside 100.64.0.0/10 192.168.50.0/24?"
+  # is a question a tired person gets wrong at the exact moment it matters.
+  local c rc verdict="outside"
+  # shellcheck disable=SC2086
+  for c in $SSH_ALLOW_FROM; do
+    rc=0
+    ip_in_cidr "$client_ip" "$c" || rc=$?
+    case "$rc" in
+      0) verdict="inside"; break ;;
+      2) verdict="unknown" ;;
+    esac
+  done
+
+  case "$verdict" in
+    inside)
+      ok "this session is from $client_ip, covered by SSH_ALLOW_FROM"
+      return 0 ;;
+    outside)
+      die "This session is over SSH from $client_ip, and that address is inside
+     none of: $SSH_ALLOW_FROM
+     Enabling the firewall would disconnect you the moment it came up, with no
+     way back in. Re-run from the console, or add a block containing
+     $client_ip." ;;
+  esac
+
+  # Undecidable — IPv6 on one side or the other. Fall back to asking, which is
+  # what this whole function used to do.
   warn "This session is itself over SSH, from $client_ip."
-  warn "SSH_ALLOW_FROM is $SSH_ALLOW_FROM — if that block does not contain"
-  warn "$client_ip, enabling the firewall will disconnect you permanently."
+  warn "SSH_ALLOW_FROM is $SSH_ALLOW_FROM, and whether that covers $client_ip"
+  warn "could not be determined here. If it does not, enabling the firewall"
+  warn "will disconnect you permanently."
   echo >&2
 
   if [ ! -t 0 ]; then
@@ -395,9 +466,15 @@ configure_ufw() {
   # firewall is enabled. Doing it the other way round is the classic way to
   # lose a remote box: 'ufw enable' takes effect immediately.
   if [ -n "$SSH_ALLOW_FROM" ]; then
-    sudo ufw allow from "$SSH_ALLOW_FROM" to any port "$SSH_PORT" proto tcp comment 'SSH (dotfiles)' >/dev/null \
-      || die "could not add the ufw SSH rule"
-    ok "SSH allowed from $SSH_ALLOW_FROM on port $SSH_PORT"
+    # One rule per block. ufw skips a rule it already has, so re-running with
+    # the same list is a no-op rather than a pile of duplicates.
+    local c
+    # shellcheck disable=SC2086
+    for c in $SSH_ALLOW_FROM; do
+      sudo ufw allow from "$c" to any port "$SSH_PORT" proto tcp comment 'SSH (dotfiles)' >/dev/null \
+        || die "could not add the ufw SSH rule for $c"
+      ok "SSH allowed from $c on port $SSH_PORT"
+    done
   else
     # limit, not allow: ufw's own rate limiter drops a source that opens more
     # than 6 connections in 30s. It overlaps with fail2ban but acts earlier,

@@ -107,6 +107,7 @@ machines they aren't sitting in front of.
 ```bash
 ./harden-ssh.sh                                  # keys only, SSH open to any source
 SSH_ALLOW_FROM=192.168.1.0/24 ./harden-ssh.sh    # LAN only — the strongest option here
+SSH_ALLOW_FROM="100.64.0.0/10 192.168.1.0/24" ./harden-ssh.sh   # tailnet or LAN
 SSH_PASSWORD_AUTH=yes ./harden-ssh.sh            # also accept passwords
 SSH_PORT=2222 ./harden-ssh.sh                    # non-default port
 SSH_ALLOW_USERS="jrw deploy" ./harden-ssh.sh     # accounts allowed to log in
@@ -170,9 +171,13 @@ Five things this script handles that a hand-rolled version usually doesn't:
   setting `PasswordAuthentication no` silently beats a later drop-in. The script
   names any conflicting file, then re-reads the *effective* config with `sshd -T`
   and warns if what you asked for is not what won.
-- **Lockout refusal.** If it's running over SSH and `SSH_ALLOW_FROM` might not
-  contain the current client, it stops and asks — and with no terminal to ask
-  on, it aborts rather than guessing.
+- **Lockout refusal.** If it's running over SSH, it works out whether the
+  client address is actually inside one of the `SSH_ALLOW_FROM` blocks rather
+  than asking you to eyeball it — a question that gets easy to get wrong once
+  the list has more than one entry, at the exact moment it matters. Provably
+  outside means refuse, not prompt: answering "yes" there is a guaranteed
+  disconnect. It only falls back to asking when the answer is genuinely
+  undecidable (IPv6 on one side), and with no terminal to ask on, it aborts.
 - **CIDRs that are wrong in silence.** `SSH_ALLOW_FROM` is validated properly,
   not just checked for a slash. `192.168.1.0/99` would make the rule match
   nothing and firewall SSH off from everyone; `192.168.1.5/24` has host bits
