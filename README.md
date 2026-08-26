@@ -276,6 +276,7 @@ $ SSH_ALLOW_FROM=192.168.1.0/24 ./ubuntu/harden-ssh.sh    # reachable from the L
 $ SSH_PASSWORD_AUTH=yes ./ubuntu/harden-ssh.sh            # also accept passwords
 $ SSH_ALLOW_FROM="100.64.0.0/10 192.168.1.0/24" ./ubuntu/harden-ssh.sh   # tailnet or LAN
 $ ./ubuntu/tailscale.sh                                   # Tailscale from its signed apt repo
+$ RDP_ALLOW_FROM=100.64.0.0/10 ./ubuntu/remote-desktop.sh # GNOME RDP, tailnet only
 ```
 
 `tailscale.sh` pins Tailscale's signing key by fingerprint like every other
