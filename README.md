@@ -189,6 +189,30 @@ hand — the provisioning script sets up the font, frees the hotkey, and
 installs Extension Manager for you, but deliberately does not install
 extensions. See [Ubuntu desktop provisioning](#ubuntu-desktop-provisioning).
 
+###### 10. Remote access (optional, and last)
+
+Steps 1–9 give you a working workstation and nothing listening on the network.
+If you also want to reach this box from elsewhere, two opt-in scripts do that,
+and the order between them matters:
+
+```
+$ ./ubuntu/tailscale.sh                                   # install, then: sudo tailscale up
+$ SSH_ALLOW_FROM=100.64.0.0/10 ./ubuntu/harden-ssh.sh     # sshd reachable over the tailnet only
+```
+
+Tailscale first, and `sudo tailscale up` before the second command. Tailscale
+hands out addresses from `100.64.0.0/10`, so that `SSH_ALLOW_FROM` confines
+sshd to your tailnet with no port open to the internet — but only if the
+interface already exists when ufw comes up. `harden-ssh.sh` enables the
+firewall immediately and will refuse to do so over a remote session whose
+client IP falls outside the block, which is the failure mode it is protecting
+you from.
+
+Skip Tailscale and `./ubuntu/harden-ssh.sh` alone is still fine — see
+[Ubuntu desktop provisioning](#ubuntu-desktop-provisioning) for the variants.
+Neither script runs as part of provisioning, and neither has been run on a box
+just because steps 1–9 succeeded.
+
 #### Ubuntu desktop provisioning
 
 For a fresh Ubuntu box that also needs desktop apps (vim, Telegram, Signal,
@@ -227,14 +251,28 @@ already provides. See
 rationale and [ubuntu/WHATSAPP_ALTERNATIVES.md](ubuntu/WHATSAPP_ALTERNATIVES.md)
 for the WhatsApp situation.
 
-Remote access is a separate, opt-in script — a firewall shouldn't switch on as a
-side effect of installing desktop apps:
+Remote access is two separate, opt-in scripts — a firewall shouldn't switch on,
+and a box shouldn't join a VPN, as a side effect of installing desktop apps:
 
 ```
 $ ./ubuntu/harden-ssh.sh                                  # sshd + ufw + fail2ban, keys only
 $ SSH_ALLOW_FROM=192.168.1.0/24 ./ubuntu/harden-ssh.sh    # reachable from the LAN only
 $ SSH_PASSWORD_AUTH=yes ./ubuntu/harden-ssh.sh            # also accept passwords
+$ ./ubuntu/tailscale.sh                                   # Tailscale from its signed apt repo
 ```
+
+`tailscale.sh` pins Tailscale's signing key by fingerprint like every other
+vendor repo here, resolves the apt suite from this box's own Ubuntu codename
+(and stops with an explanation rather than guessing when Tailscale has not
+published for a new release yet), installs the package and starts `tailscaled`.
+It does **not** log you in: `tailscale up` needs a browser flow or an auth key,
+and an auth key on a command line is a secret in `argv` and your shell history
+— the same reasoning that keeps `pro attach` manual. Run `sudo tailscale up`
+yourself afterwards.
+
+The two compose: `SSH_ALLOW_FROM=100.64.0.0/10 ./ubuntu/harden-ssh.sh` puts
+sshd behind your tailnet with nothing exposed to the internet. Bring Tailscale
+up first — see [step 10](#10-remote-access-optional-and-last).
 
 #### Windows (Native)
 

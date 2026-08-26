@@ -39,6 +39,10 @@ readonly ONEPASSWORD_FPR="3FEF9748469ADBE15DA7CA80AC2D62742012EA22"
 # That it also signs the Ubuntu archive is checkable: the Release.gpg on
 # linux.dropbox.com/ubuntu names this fingerprint as its issuer.
 readonly DROPBOX_FPR="1C61A2656FB57B7E4DE0F4C1FC918B335044912E"
+# Tailscale: https://tailscale.com/download/linux — one key signs every suite
+# they publish, and the per-release .noarmor.gpg files are byte-identical, so
+# the pin does not change when the Ubuntu codename does.
+readonly TAILSCALE_FPR="2596A99EAAB33821893C0A79458CA832957F5868"
 
 # --- Output ----------------------------------------------------------------
 
