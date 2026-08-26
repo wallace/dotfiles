@@ -48,6 +48,7 @@ ubuntu/
 ├── provision.sh              # interactive; prompts for WhatsApp
 ├── harden-ssh.sh             # opt-in: sshd + ufw + fail2ban
 ├── tailscale.sh              # opt-in: Tailscale from its signed apt repo
+├── remote-desktop.sh         # opt-in: GNOME RDP, allow-listed source
 ├── lib/
 │   └── common.sh             # shared helpers, pinned key fingerprints
 ├── DOTFILES_README.md        # this file
@@ -96,7 +97,7 @@ Note this step is in `provision.sh` only, not `provision-minimal.sh`: the
 attach flow needs a browser and a person, which is exactly what the minimal
 script has neither of.
 
-## Remote access (`harden-ssh.sh`, `tailscale.sh`)
+## Remote access (`harden-ssh.sh`, `tailscale.sh`, `remote-desktop.sh`)
 
 Both deliberately **not** part of `provision.sh`. That script sets up a
 workstation; these open a listening port and turn on a firewall, or join the
@@ -153,6 +154,46 @@ SSH_ALLOW_FROM=100.64.0.0/10 ./harden-ssh.sh
 That leaves sshd reachable over the tailnet and closed to the internet. Bring
 Tailscale up *first*: `harden-ssh.sh` enables ufw immediately, and refuses to
 do it over a remote session whose client IP is outside the allowed block.
+
+### Remote desktop (`remote-desktop.sh`)
+
+GNOME's RDP server, for when you want a GUI app from this box on another
+screen. Faster than `ssh -Y`, which round-trips every drawing operation, and
+unlike `waypipe` it works from macOS and Windows — neither has a Wayland
+compositor for waypipe to draw on.
+
+```bash
+RDP_ALLOW_FROM=100.64.0.0/10 ./remote-desktop.sh              # tailnet only
+RDP_ALLOW_FROM="100.64.0.0/10 192.168.1.0/24" ./remote-desktop.sh
+```
+
+`RDP_ALLOW_FROM` is **required**, where `harden-ssh.sh`'s `SSH_ALLOW_FROM` may
+be left unset. That asymmetry is deliberate: sshd here is keys-only, so an
+exposed port costs an attacker a key they do not have. RDP authenticates with a
+username and password, which is a different class of risk, and defaulting to an
+open port would be that trade made silently on your behalf.
+
+Three things it handles that the Settings panel leaves you to find out about:
+
+- **The certificate.** RDP will not start without one and `grdctl` has no
+  command to generate one — the Settings panel does it out of sight. The script
+  makes a self-signed cert when none exists, and leaves an existing one alone:
+  regenerating changes the fingerprint and every client that trusted the old
+  one starts warning again. The fingerprint is printed so you can check it on
+  first connect rather than clicking through blind.
+- **View-only is the default.** Leave it and the connection works, the desktop
+  appears, and nothing responds to the mouse — which reads as a broken session
+  rather than a setting. The script turns it off unless you ask for it.
+- **Credentials stay manual.** `grdctl rdp set-credentials user pass` puts the
+  password in `argv`, in `ps`, and in your shell history. The script reports
+  whether credentials exist and tells you how to set them without that. Note
+  that `grdctl status` prints the password in the clear, so it is not a command
+  to run in front of an audience.
+
+It adds ufw *rules* but never enables the firewall — that belongs to
+`harden-ssh.sh`, which has the lockout guards for it. It configures the user
+service, which shares the session you are logged into, so it stops answering
+when you log out; Remote Login in Settings is the headless alternative.
 
 Five things this script handles that a hand-rolled version usually doesn't:
 

@@ -79,6 +79,118 @@ _run_exit_hooks() {
 }
 trap _run_exit_hooks EXIT
 
+# --- CIDR ------------------------------------------------------------------
+#
+# Shared by harden-ssh.sh and remote-desktop.sh, which both take a list of
+# source blocks and both lock you out of something if they get it wrong.
+#
+# ufw rejects a malformed CIDR with a usage message and a zero exit in some
+# versions, which would leave us "allowing" nothing at all. Check it here
+# where we can still refuse to continue.
+#
+# "Does it contain a slash" is not enough, because the two ways to get this
+# subtly wrong are both silent and land on opposite sides of what you wanted:
+#
+#   192.168.1.0/99   nonsense prefix. Nothing matches the rule, so the service
+#                    ends up firewalled off from every source including yours.
+#   192.168.1.5/24   host bits set. The mask discards them, so this quietly
+#                    means all of 192.168.1.0/24 — 253 hosts more than the one
+#                    you named. Widening an access rule by accident is exactly
+#                    what this script exists to stop.
+#
+# Both are refused, naming the block the input would actually have meant, so
+# the correction is obvious rather than a puzzle.
+#
+# Leading zeros are refused too: 010.1.1.1 is not 10.1.1.1 to a shell doing
+# arithmetic, it is octal 8, and inet_pton has rejected that form for years.
+validate_cidr() {
+  local cidr="$1" var="${2:-CIDR}" addr prefix n
+
+  case "$cidr" in
+    */*) addr="${cidr%%/*}"; prefix="${cidr#*/}" ;;
+    *) die "$var must be a CIDR block such as 192.168.1.0/24, got '$cidr'." ;;
+  esac
+
+  case "$prefix" in
+    ''|*[!0-9]*) die "$var prefix must be a number: '$cidr'." ;;
+    0) : ;;
+    0*) die "$var prefix has a leading zero: '$cidr'." ;;
+  esac
+
+  # IPv6 goes to ufw as-is. The host-bit arithmetic below is IPv4-only, so
+  # check the prefix range and leave the address to ufw rather than pretending
+  # to a thoroughness this function does not have.
+  case "$addr" in
+    *:*)
+      [ "$prefix" -le 128 ] \
+        || die "$var prefix must be 0-128 for IPv6, got '$cidr'."
+      return 0 ;;
+  esac
+
+  [ "$prefix" -le 32 ] \
+    || die "$var prefix must be 0-32 for IPv4, got '$cidr'."
+
+  local -a o=()
+  local IFS=.
+  read -r -a o <<< "$addr"
+  unset IFS
+  [ "${#o[@]}" -eq 4 ] \
+    || die "$var must be a dotted quad such as 192.168.1.0/24, got '$cidr'."
+
+  for n in "${o[@]}"; do
+    case "$n" in
+      ''|*[!0-9]*) die "$var has a non-numeric octet: '$cidr'." ;;
+      0) : ;;
+      0*) die "$var has an octet with a leading zero: '$cidr'." ;;
+    esac
+    [ "$n" -le 255 ] || die "$var octet out of range (0-255): '$cidr'."
+  done
+
+  # Host bits: build the 32-bit value, mask it, and see if anything was lost.
+  local ip=$(( (o[0] << 24) | (o[1] << 16) | (o[2] << 8) | o[3] ))
+  local mask=0
+  [ "$prefix" -gt 0 ] && mask=$(( (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF ))
+  local net=$(( ip & mask ))
+  if [ "$net" -ne "$ip" ]; then
+    die "$var has host bits set: '$cidr'.
+     ufw would widen this to $(( (net >> 24) & 255 )).$(( (net >> 16) & 255 )).$(( (net >> 8) & 255 )).$(( net & 255 ))/$prefix.
+     Write that if you meant the block, or $addr/32 if you meant the one host."
+  fi
+}
+
+# Is an IPv4 address inside an IPv4 CIDR?
+#
+#   0  yes        1  no        2  cannot tell from arithmetic (IPv6 either side)
+#
+# The third answer matters: the caller uses this to decide whether enabling the
+# firewall would cut off the session running the script, and "I don't know" has
+# to stay distinguishable from "no" or somebody gets disconnected on a guess.
+ip_in_cidr() {
+  local ip="$1" cidr="$2" net prefix n
+  case "$ip$cidr" in *:*) return 2 ;; esac
+
+  net="${cidr%%/*}"; prefix="${cidr#*/}"
+  case "$prefix" in ''|*[!0-9]*) return 2 ;; esac
+  [ "$prefix" -le 32 ] || return 2
+
+  local -a a=() b=()
+  local IFS=.
+  read -r -a a <<< "$ip"
+  read -r -a b <<< "$net"
+  unset IFS
+  [ "${#a[@]}" -eq 4 ] && [ "${#b[@]}" -eq 4 ] || return 2
+  for n in "${a[@]}" "${b[@]}"; do
+    case "$n" in ''|*[!0-9]*) return 2 ;; esac
+    [ "$n" -le 255 ] || return 2
+  done
+
+  local ipv=$(( (a[0] << 24) | (a[1] << 16) | (a[2] << 8) | a[3] ))
+  local netv=$(( (b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3] ))
+  local mask=0
+  [ "$prefix" -gt 0 ] && mask=$(( (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF ))
+  [ $(( ipv & mask )) -eq $(( netv & mask )) ]
+}
+
 # --- Preflight -------------------------------------------------------------
 
 require_ubuntu() {
