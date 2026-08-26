@@ -62,6 +62,16 @@ else
   warn() { printf '%swarn%s %s\n' "$C_YELLOW" "$C_RESET" "$*" >&2; }
   die()  { printf '%sfail%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; exit 1; }
   have() { command -v "$1" >/dev/null 2>&1; }
+  # One EXIT trap for the run, with a list of hooks under it: bash keeps a
+  # single handler per signal, so per-function `trap ... EXIT` calls used to
+  # silently replace each other.
+  _EXIT_HOOKS=()
+  on_exit() { _EXIT_HOOKS+=("$1"); }
+  _run_exit_hooks() {
+    local h
+    for h in ${_EXIT_HOOKS[@]+"${_EXIT_HOOKS[@]}"}; do eval "$h" || true; done
+  }
+  trap _run_exit_hooks EXIT
   require_ubuntu() {
     [ -r /etc/os-release ] || die "no /etc/os-release; this script targets Ubuntu/Debian."
     # shellcheck disable=SC1091
@@ -87,6 +97,32 @@ else
       fi
     fi
     ok "sudo available"
+    start_sudo_keepalive
+  }
+  # sudo forgets the timestamp after 15 minutes by default, and this run spends
+  # longer than that between sudo calls (a ~100MB Obsidian download, apt
+  # fetching Signal and 1Password), so every gap costs another password prompt.
+  # Refresh it in the background instead. `sudo -n` never prompts, a failed
+  # refresh ends the loop rather than retrying forever, and the parent check
+  # means a hard kill of the script cannot leave it running behind your back.
+  _SUDO_KEEPALIVE_PID=""
+  start_sudo_keepalive() {
+    [ -z "$_SUDO_KEEPALIVE_PID" ] || return 0
+    (
+      while true; do
+        sudo -n true 2>/dev/null || exit 0
+        sleep 50
+        kill -0 "$$" 2>/dev/null || exit 0   # $$ is the script, not this subshell
+      done
+    ) &
+    _SUDO_KEEPALIVE_PID=$!
+    disown "$_SUDO_KEEPALIVE_PID" 2>/dev/null || true
+    on_exit stop_sudo_keepalive
+  }
+  stop_sudo_keepalive() {
+    [ -n "$_SUDO_KEEPALIVE_PID" ] || return 0
+    kill "$_SUDO_KEEPALIVE_PID" 2>/dev/null || true
+    _SUDO_KEEPALIVE_PID=""
   }
   _APT_UPDATED=0
   apt_update_once() {
@@ -158,7 +194,8 @@ else
     local url="$1" dest="$2" want_fprs="$3" dearmor="${4:-}" tmp got=() f w known
     tmp="$(mktemp)" || die "mktemp failed"
     # shellcheck disable=SC2064
-    trap "rm -f '$tmp'" RETURN EXIT
+    trap "rm -f '$tmp'" RETURN
+    on_exit "rm -f '$tmp'"
     curl -fsSL --proto '=https' --tlsv1.2 "$url" -o "$tmp" \
       || die "could not download signing key from $url"
     # Primary keys only; gpg emits an fpr record for each subkey too.
@@ -667,7 +704,8 @@ install_obsidian() {
   local tmp=""
   tmp="$(mktemp -d)" || { warn "mktemp failed; skipping Obsidian."; return 0; }
   # shellcheck disable=SC2064
-  trap "rm -rf '$tmp'" RETURN EXIT
+  trap "rm -rf '$tmp'" RETURN
+  on_exit "rm -rf '$tmp'"
   # apt drops to the _apt user to read the file and warns about an unsandboxed
   # download when it cannot, so make the path readable rather than 0700.
   chmod 0755 "$tmp"
