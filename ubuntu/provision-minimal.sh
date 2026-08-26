@@ -28,6 +28,7 @@
 #   SKIP_OBSIDIAN=1  skip Obsidian
 #   SKIP_KEYBOARD=1  leave Caps Lock alone (it is remapped to Control)
 #   SKIP_EMOJI=1     leave the ibus emoji picker and its hotkeys alone
+#   SKIP_WAYPIPE=1   skip waypipe (Wayland app forwarding over SSH)
 
 set -euo pipefail
 
@@ -378,6 +379,7 @@ EMOJI_FONT_CHOICE="" # ibus emoji picker font, reported in the summary
 EMOJI_HOTKEY_CHOICE="" # ibus emoji hotkey split, reported in the summary
 EMOJI_EXT_CHOICE=""  # Emoji Copy extension presence, reported in the summary
 EMOJI_MGR_CHOICE=""  # Extension Manager package state, reported in the summary
+WAYPIPE_CHOICE=""    # waypipe presence, reported in the summary
 
 # ---------------------------------------------------------------------------
 # Installers. Each is idempotent and safe to re-run.
@@ -392,6 +394,30 @@ install_base() {
   # ubuntu-desktop dependency; a minimal install has no emoji font at all.
   apt_install curl gnupg ca-certificates apt-transport-https fonts-noto-color-emoji
   apt_install_unless_brew vim git
+}
+
+# waypipe is the Wayland answer to `ssh -X`: it proxies Wayland protocol
+# messages over an SSH connection, so a GUI app running here draws on the
+# machine you SSHed in from.
+#
+# It forwards the protocol, not pixels, so the machine you are VIEWING from
+# must speak Wayland too. Linux to Linux, fine. From macOS or Windows there is
+# no Wayland compositor to receive it, and `ssh -Y` with an X server or a
+# remote desktop session is what actually works.
+install_waypipe() {
+  [ "${SKIP_WAYPIPE:-0}" = "1" ] && {
+    warn "skipping waypipe (SKIP_WAYPIPE=1)"
+    WAYPIPE_CHOICE="skipped"
+    return 0
+  }
+  step "waypipe (Wayland app forwarding over SSH)"
+  if apt_install_optional waypipe; then
+    WAYPIPE_CHOICE="installed"
+  else
+    WAYPIPE_CHOICE="not installed"
+    warn "waypipe unavailable; ssh -Y with an X server still works."
+  fi
+  return 0
 }
 
 setup_keyboard() {
@@ -915,6 +941,7 @@ ${C_GREEN}───────────────────────�
   emoji hotkey     ${EMOJI_HOTKEY_CHOICE:-not configured}
   emoji picker     ${EMOJI_EXT_CHOICE:-not checked}
   ext manager      ${EMOJI_MGR_CHOICE:-not checked}
+  waypipe          ${WAYPIPE_CHOICE:-not configured}
   telegram         $(have telegram-desktop && echo 'installed' || echo "browser — $TELEGRAM_URL")
   signal           $(have signal-desktop && echo 'installed' || echo 'not installed')
   1password        $(have 1password && echo 'installed' || echo 'not installed')
@@ -952,6 +979,7 @@ main() {
   note_brew
 
   install_base
+  install_waypipe
   setup_keyboard
   setup_emoji_input
   install_telegram

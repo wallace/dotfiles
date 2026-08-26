@@ -241,6 +241,14 @@ desktop — GNOME ignores the former, so it takes both. XKB maps per seat, so
 Bluetooth keyboards pick it up along with everything else. Set `SKIP_KEYBOARD=1`
 to opt out.
 
+They also install **waypipe**, the Wayland counterpart to `ssh -X`: it proxies
+Wayland protocol messages over an SSH connection so a GUI app running on the
+box draws on the machine you connected from. It forwards the protocol rather
+than pixels, so the viewing end must speak Wayland too — Linux to Linux works,
+but from macOS or Windows there is no compositor to receive it and you want
+`ssh -Y` with an X server, or a remote desktop session, instead. Set
+`SKIP_WAYPIPE=1` to opt out.
+
 Neither script installs `zsh` or `stow`; those come from step 1 of the
 walkthrough above, or from the Brewfile.
 
