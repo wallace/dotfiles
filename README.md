@@ -200,6 +200,14 @@ $ ./ubuntu/tailscale.sh                                   # install, then: sudo 
 $ SSH_ALLOW_FROM=100.64.0.0/10 ./ubuntu/harden-ssh.sh     # sshd reachable over the tailnet only
 ```
 
+`SSH_ALLOW_FROM` is space-separated, so to reach the box over the tailnet from
+anywhere *and* over the LAN when you are home — a useful fallback for when
+Tailscale is logged out or expired:
+
+```
+$ SSH_ALLOW_FROM="100.64.0.0/10 192.168.50.0/24" ./ubuntu/harden-ssh.sh
+```
+
 Tailscale first, and `sudo tailscale up` before the second command. Tailscale
 hands out addresses from `100.64.0.0/10`, so that `SSH_ALLOW_FROM` confines
 sshd to your tailnet with no port open to the internet — but only if the
@@ -258,6 +266,7 @@ and a box shouldn't join a VPN, as a side effect of installing desktop apps:
 $ ./ubuntu/harden-ssh.sh                                  # sshd + ufw + fail2ban, keys only
 $ SSH_ALLOW_FROM=192.168.1.0/24 ./ubuntu/harden-ssh.sh    # reachable from the LAN only
 $ SSH_PASSWORD_AUTH=yes ./ubuntu/harden-ssh.sh            # also accept passwords
+$ SSH_ALLOW_FROM="100.64.0.0/10 192.168.1.0/24" ./ubuntu/harden-ssh.sh   # tailnet or LAN
 $ ./ubuntu/tailscale.sh                                   # Tailscale from its signed apt repo
 ```
 
