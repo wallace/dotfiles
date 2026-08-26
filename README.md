@@ -26,52 +26,120 @@ $ brew bundle # installs all things listed in Brewfile
 $ # Note: reattach-to-user-namespace and ical-buddy are macOS-only and will be skipped
 ```
 
-##### Full Linux walkthrough (fresh box, only git and zsh installed)
+##### Full Linux walkthrough (fresh box, nothing but the stock image)
 
 `install.sh` does **not** apply here — its body is gated behind
 `if [ "$CODESPACES" == "true" ]` and it exits without doing anything on an
 ordinary machine. Use these steps instead.
 
-`.zshrc` calls `source $ZSH/oh-my-zsh.sh` and `prompt pure` unguarded, so zsh
-errors on startup if either is missing. `brew bundle` (step 2) installs pure and
-`.zshrc` picks it up from brew's `site-functions`; oh-my-zsh needs its own
-installer. Both must land before stowing.
+**What a stock Ubuntu image actually gives you.** Checked against the
+`ubuntu-standard` dependency set rather than assumed:
+
+| Tool | Present on a fresh image? |
+| --- | --- |
+| `apt`, `wget`, `gpg`, `ca-certificates` | yes |
+| `curl` | **no** — not in any `ubuntu-*` metapackage |
+| `git` | **no** |
+| `zsh` | **no** |
+| `stow` | **no** |
+| `gh` | **no** |
+
+Three constraints fix the order below. Each one is a trap you only find by
+hitting it:
+
+1. **`curl` is not installed**, so the `curl … | bash` one-liner in
+   `ubuntu/provision-minimal.sh`'s own header cannot be your first command on
+   a truly fresh box. `wget` is there; `curl` is not.
+2. **Homebrew cannot go first.** Its installer bails with *"You must install
+   Git before installing Homebrew"* and the same for cURL, so brew is not a
+   way to *obtain* git and curl — it is a consumer of them. This is why the
+   Brewfile listing `git` and `zsh` does not help you here.
+3. **The provisioning scripts install `git` and `gh`, but not `zsh` or
+   `stow`.** Those two are yours to install, and `stow` is what places every
+   dotfile in this repo — nothing works before it exists.
+
+###### 1. apt bootstrap
+
+Everything else depends on this, and apt is the only thing guaranteed present:
 
 ```
-$ # 1. stow is the bootstrap dependency — apt, so it's available immediately
-$ sudo apt update && sudo apt install -y stow
-$
-$ # 2. Homebrew, then the Brewfile (vim, tmux, fzf, ripgrep, gh, direnv, ...)
+$ sudo apt update
+$ sudo apt install -y curl git stow zsh
+```
+
+`git` and `curl` unblock both the clone and Homebrew; `stow` places the
+dotfiles; `zsh` is the login shell. The provisioning script installs `git`
+too and will simply no-op on it here.
+
+###### 2. Clone
+
+```
+$ git clone https://github.com/wallace/dotfiles.git ~/dotfiles
+```
+
+###### 3. Provision the desktop (installs `gh`)
+
+Run this before the shell setup — it is what gives you `gh`, Claude Code, and
+the rest, all from GPG-signed vendor repos:
+
+```
+$ cd ~/dotfiles && ./ubuntu/provision.sh
+```
+
+It prompts for WhatsApp and Ubuntu Pro, so it needs a terminal it can read
+from. For an unattended box, or one where you have not cloned yet:
+
+```
+$ ./ubuntu/provision-minimal.sh                       # non-interactive
+$ wget -qO- https://raw.githubusercontent.com/wallace/dotfiles/main/ubuntu/provision-minimal.sh | bash
+```
+
+Note `wget -qO-`, not `curl`, in that last form — it is the case where curl
+may not exist yet. Read the script before piping it into a shell. Both are
+safe to re-run; see [Ubuntu desktop provisioning](#ubuntu-desktop-provisioning)
+below for what they install and why.
+
+###### 4. Homebrew and the Brewfile
+
+Legal only now that step 1 supplied git and curl:
+
+```
 $ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 $ eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"   # needed now; .zshrc handles it later
 $ cd ~/dotfiles && brew bundle
-$
-$ # 3. oh-my-zsh (required by .zshrc). CHSH/RUNZSH as env vars, not just
-$ #    --unattended: the flag only reaches the script through that empty ""
-$ #    positional, and it prompts to change your shell if it gets dropped.
-$ #    Step 7 changes the shell instead.
-$ CHSH=no RUNZSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended --keep-zshrc
-$
-$ # 4. clear the way — stow refuses to clobber a real file
-$ mv ~/.zshrc ~/.zshrc.bak 2>/dev/null; rm -f ~/.zshrc
-$
-$ # 5. stow the cross-platform packages (see Steps below for the macOS-only ones)
-$ cd ~/dotfiles && stow -t ~ zsh bash git vim nvim tmux readline ctags \
-    base16-shell scripts claude copilot-cli irb rspec rubygems \
-    ruby_debugger rbenv obsidian kitty lein
-$
-$ # 6. vim (.vimrc bootstraps vim-plug itself; ~/.vim-tmp prevents write errors)
-$ mkdir -p ~/.vim-tmp && vim +PlugUpdate +qa
-$
-$ # 7. make zsh your login shell, then log out and back in
-$ chsh -s "$(command -v zsh)"
 ```
 
-Every formula in the Brewfile ships a prebuilt Linux bottle (x86_64 and arm64),
-so `brew bundle` downloads binaries rather than compiling. Homebrew's own
-installer may still ask for `build-essential`.
+Every formula in the Brewfile ships a prebuilt Linux bottle (x86_64 and
+arm64), so this downloads binaries rather than compiling. Homebrew's installer
+may still ask for `build-essential`.
 
-If a stow step aborts on a conflict, dry-run it to see what's in the way:
+###### 5. oh-my-zsh and pure
+
+`.zshrc` calls `source $ZSH/oh-my-zsh.sh` and `prompt pure` **unguarded**, so
+zsh errors on every startup if either is missing. Both must land before you
+stow. `brew bundle` in step 4 installed pure and `.zshrc` picks it up from
+brew's `site-functions`; oh-my-zsh needs its own installer:
+
+```
+$ CHSH=no RUNZSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended --keep-zshrc
+```
+
+`CHSH`/`RUNZSH` are set as env vars, not just `--unattended`: the flag only
+reaches the script through that empty `""` positional, and it prompts to
+change your shell if it gets dropped. Step 8 changes the shell instead.
+
+###### 6. Stow the dotfiles
+
+`stow` refuses to clobber a real file, so clear the one oh-my-zsh just wrote:
+
+```
+$ mv ~/.zshrc ~/.zshrc.bak 2>/dev/null; rm -f ~/.zshrc
+$ cd ~/dotfiles && stow -t ~ zsh bash git ssh vim nvim tmux readline ctags \
+    base16-shell scripts claude copilot-cli irb rspec rubygems \
+    ruby_debugger rbenv obsidian kitty lein
+```
+
+If a stow step aborts on a conflict, dry-run it to see what is in the way:
 
 ```
 $ stow -n -v -t ~ zsh
@@ -79,11 +147,56 @@ $ stow -n -v -t ~ zsh
 
 Back up whatever it names, remove it, and re-run.
 
+###### 7. vim
+
+```
+$ mkdir -p ~/.vim-tmp && vim +PlugUpdate +qa
+```
+
+`.vimrc` bootstraps vim-plug itself; `~/.vim-tmp` prevents backup-write errors.
+
+###### 8. Login shell
+
+```
+$ chsh -s "$(command -v zsh)"
+```
+
+Log out and back in for this to take effect.
+
+###### 9. Sign in, and the one non-obvious gotcha
+
+```
+$ gh auth login
+$ dropbox start -i     # fetches the proprietary daemon, then sign in
+```
+
+**Commits will fail until you enable the 1Password SSH agent.** The `git`
+package sets `commit.gpgsign=true` with `gpg.format=ssh` and
+`/opt/1Password/op-ssh-sign` as the signer. If the agent is off, every commit
+dies with:
+
+```
+error: 1Password: Could not connect to socket. Is the agent running?
+fatal: failed to write commit object
+```
+
+Fix it in 1Password → **Settings → Developer → Use the SSH agent**, which
+creates `~/.1password/agent.sock`. Running 1Password is not enough on its own —
+the integration is a separate toggle.
+
+Finally, `Super+.` stays dead until you install the Emoji Copy extension by
+hand — the provisioning script sets up the font, frees the hotkey, and
+installs Extension Manager for you, but deliberately does not install
+extensions. See [Ubuntu desktop provisioning](#ubuntu-desktop-provisioning).
+
 #### Ubuntu desktop provisioning
 
 For a fresh Ubuntu box that also needs desktop apps (vim, Telegram, Signal,
 1Password, GitHub CLI, Claude Code, Claude Desktop, Dropbox, Obsidian), see
-[ubuntu/](ubuntu/):
+[ubuntu/](ubuntu/). They also set up emoji input: the colour emoji font, the
+ibus picker font, freeing `Super+.` for the Emoji Copy shell extension, and
+Extension Manager to install it with — Ubuntu ships no graphical extension
+manager of its own. Set `SKIP_EMOJI=1` to opt out.
 
 ```
 $ ./ubuntu/provision.sh              # interactive
@@ -95,6 +208,9 @@ Both scripts also remap **Caps Lock to Control** via XKB's `ctrl:nocaps`, writin
 desktop — GNOME ignores the former, so it takes both. XKB maps per seat, so
 Bluetooth keyboards pick it up along with everything else. Set `SKIP_KEYBOARD=1`
 to opt out.
+
+Neither script installs `zsh` or `stow`; those come from step 1 of the
+walkthrough above, or from the Brewfile.
 
 Everything installs from official, GPG-signed vendor repositories with keys
 pinned by fingerprint — no snaps. The one exception is **Obsidian**, which runs
@@ -176,7 +292,7 @@ New-Item -ItemType HardLink -Path "$env:USERPROFILE\Documents\PowerShell\Microso
 
 #### All Platforms
 
-Already covered by the [full Linux walkthrough](#full-linux-walkthrough-fresh-box-only-git-and-zsh-installed) — skip this if you followed it.
+Already covered by the [full Linux walkthrough](#full-linux-walkthrough-fresh-box-nothing-but-the-stock-image) — skip this if you followed it.
 
 ```
 $ # set up oh-my-zsh
