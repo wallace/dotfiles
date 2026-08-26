@@ -47,6 +47,7 @@ ubuntu/
 ├── provision-minimal.sh      # non-interactive; safe for curl | bash
 ├── provision.sh              # interactive; prompts for WhatsApp
 ├── harden-ssh.sh             # opt-in: sshd + ufw + fail2ban
+├── tailscale.sh              # opt-in: Tailscale from its signed apt repo
 ├── lib/
 │   └── common.sh             # shared helpers, pinned key fingerprints
 ├── DOTFILES_README.md        # this file
@@ -95,10 +96,11 @@ Note this step is in `provision.sh` only, not `provision-minimal.sh`: the
 attach flow needs a browser and a person, which is exactly what the minimal
 script has neither of.
 
-## Remote access (`harden-ssh.sh`)
+## Remote access (`harden-ssh.sh`, `tailscale.sh`)
 
-Deliberately **not** part of `provision.sh`. That script sets up a workstation;
-this one opens a listening port and turns on a firewall. A firewall switching on
+Both deliberately **not** part of `provision.sh`. That script sets up a
+workstation; these open a listening port and turn on a firewall, or join the
+machine to a private network. A firewall switching on
 as a side effect of installing Signal is how people lock themselves out of
 machines they aren't sitting in front of.
 
@@ -117,6 +119,39 @@ SSH_ALLOW_USERS="jrw deploy" ./harden-ssh.sh     # accounts allowed to log in
 | `AllowUsers` | you alone | Every other account is refused before authentication, whatever its keys or password say. The script refuses a list that omits you. |
 | ufw inbound | deny | The SSH allow rule is written *before* the policy flips — the reverse order is the classic way to lose a remote box. |
 | fail2ban `sshd` | 5 tries / 10 min → 1 h | Ban time multiplies on repeat offences, up to a week. |
+
+### Tailscale (`tailscale.sh`)
+
+Same shape as every other vendor repo here: the signing key is pinned by
+fingerprint (`2596A99EAAB33821893C0A79458CA832957F5868`) and verified from the
+downloaded file before it goes anywhere apt would read it.
+
+Two things specific to this one:
+
+- **The apt suite is resolved, not assumed.** Tailscale publishes a separate
+  suite per Ubuntu release and a new release can lag by weeks. The script reads
+  this box's `VERSION_CODENAME`, probes that the suite exists, and stops with
+  an explanation rather than silently substituting another codename — which
+  would install binaries built against a different libc. `TS_SUITE=noble` is
+  the escape hatch. The signing key itself is byte-identical across suites, so
+  the pin does not move when the codename does.
+- **It does not log you in.** `tailscale up` needs a browser flow or an auth
+  key, and an auth key on a command line lands in `argv`, in `ps`, and in your
+  shell history. Same reasoning that keeps `pro attach` manual in
+  `provision.sh`: the script gets you one interactive command from done, then
+  tells you what it is.
+
+The two scripts compose. Tailscale assigns addresses from the `100.64.0.0/10`
+CGNAT range, which `harden-ssh.sh` accepts as a source restriction directly:
+
+```bash
+./tailscale.sh && sudo tailscale up
+SSH_ALLOW_FROM=100.64.0.0/10 ./harden-ssh.sh
+```
+
+That leaves sshd reachable over the tailnet and closed to the internet. Bring
+Tailscale up *first*: `harden-ssh.sh` enables ufw immediately, and refuses to
+do it over a remote session whose client IP is outside the allowed block.
 
 Four things this script handles that a hand-rolled version usually doesn't:
 
