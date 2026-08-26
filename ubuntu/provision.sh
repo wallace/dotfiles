@@ -2,7 +2,8 @@
 #
 # provision.sh — interactive Ubuntu provisioning.
 #
-# Same package set as provision-minimal.sh, but asks how you want WhatsApp.
+# Same package set as provision-minimal.sh, plus the Ubuntu Pro client, and
+# asks how you want WhatsApp rather than defaulting it to the browser.
 # Run this one from a git clone; use provision-minimal.sh for curl | bash,
 # since a prompt has nowhere to read from when stdin is the script itself.
 #
@@ -31,6 +32,7 @@ KEYBOARD_CHOICE=""   # Caps Lock remap outcome, reported in the summary
 EMOJI_FONT_CHOICE="" # ibus emoji picker font, reported in the summary
 EMOJI_HOTKEY_CHOICE="" # ibus emoji hotkey split, reported in the summary
 EMOJI_EXT_CHOICE=""  # Emoji Copy extension presence, reported in the summary
+EMOJI_MGR_CHOICE=""  # Extension Manager package state, reported in the summary
 
 # Reuse the installer functions from the minimal script by sourcing the parts
 # we need. They are duplicated here rather than extracted so each script stays
@@ -40,7 +42,12 @@ install_base() {
   step "Base packages (vim and friends, from the Ubuntu archive)"
   # curl/gnupg/ca-certificates always come from apt: they are system trust
   # infrastructure, and we need them before brew is even a question.
-  apt_install curl gnupg ca-certificates apt-transport-https
+  # fonts-noto-color-emoji is a passive data file from the archive, so it
+  # carries none of the sandbox concerns that keep the shell extension manual.
+  # Without it the ibus picker renders tofu. It is only present on a stock
+  # desktop as an ubuntu-desktop dependency; a minimal install has no emoji
+  # font at all, and the emoji step below would correctly skip itself forever.
+  apt_install curl gnupg ca-certificates apt-transport-https fonts-noto-color-emoji
   apt_install_unless_brew vim git
 }
 
@@ -94,9 +101,16 @@ setup_emoji_input() {
   local keys_want="['<Super>semicolon']"
   local cur
 
+  # Every bail-out below returns 0, not 1. These are skips, not failures, and
+  # main() calls this function bare under `set -e`, where a non-zero return
+  # aborts the entire run — taking Ubuntu Pro, Telegram, Signal, 1Password, gh,
+  # Claude, Dropbox, Obsidian, WhatsApp and the summary down with it. A machine
+  # without a desktop session should still get all of those.
   have gsettings || {
     warn "gsettings not found — skipping emoji setup."
-    return 1
+    EMOJI_FONT_CHOICE="skipped (no gsettings)"
+    EMOJI_HOTKEY_CHOICE="skipped (no gsettings)"
+    return 0
   }
 
   # Same reasoning as ensure_gnome_xkb_option: no session bus means the write
@@ -104,20 +118,31 @@ setup_emoji_input() {
   [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] || {
     warn "no session D-Bus — not touching the emoji settings."
     warn "Re-run from a desktop session."
-    return 1
+    EMOJI_FONT_CHOICE="skipped (no session D-Bus)"
+    EMOJI_HOTKEY_CHOICE="skipped (no session D-Bus)"
+    return 0
   }
 
   # Fails when ibus is not installed, which is the honest reason to skip.
   gsettings writable "$schema" font >/dev/null 2>&1 || {
     warn "ibus emoji schema unavailable — is ibus installed?"
-    return 1
+    EMOJI_FONT_CHOICE="skipped (no ibus schema)"
+    EMOJI_HOTKEY_CHOICE="skipped (no ibus schema)"
+    return 0
   }
 
   # --- 1. Picker font ---
 
   # Setting a font the box does not have would leave the picker looking
   # exactly as broken as before, so check before promising anything.
-  if have fc-list && ! fc-list | grep -qi 'Noto Color Emoji'; then
+  #
+  # Checked with fc-match rather than `fc-list | grep -q`: grep exits at its
+  # first match and closes the pipe, fc-list dies of SIGPIPE with status 141,
+  # and pipefail promotes that to the pipeline's status — so the leading `!`
+  # turned a font that is present into "missing" on every single run, and this
+  # branch never once set the font it advertises. fc-match needs no pipe and
+  # prints the family the box would actually resolve the name to.
+  if have fc-match && [ "$(fc-match 'Noto Color Emoji' -f '%{family}')" != "Noto Color Emoji" ]; then
     warn "Noto Color Emoji not installed — skipping the font."
     warn "Install fonts-noto-color-emoji, then re-run."
     EMOJI_FONT_CHOICE="skipped (no colour emoji font)"
@@ -165,7 +190,24 @@ setup_emoji_input() {
       ok "custom emoji hotkeys set — leaving them alone" ;;
   esac
 
-  # --- 3. Is the extension actually installed? ---
+  # --- 3. Extension Manager, and is the extension actually installed? ---
+
+  # Installing Extension Manager is a different question from installing an
+  # extension. This is a signed package from the Ubuntu archive, carried by the
+  # same apt trust as everything else in this script, and it is the app the
+  # summary tells you to open — leaving it out made that instruction a dead
+  # end on a fresh box, since Ubuntu ships no graphical extension manager at
+  # all. Which extensions you then choose to trust stays a manual decision.
+  #
+  # This sits after the D-Bus guard on purpose: there is no sense installing a
+  # GNOME front-end on a machine with no session to run it in.
+  if apt_install_optional gnome-shell-extension-manager; then
+    EMOJI_MGR_CHOICE="installed"
+  else
+    EMOJI_MGR_CHOICE="not installed"
+    warn "Extension Manager unavailable — install Emoji Copy from"
+    warn "extensions.gnome.org in a browser instead."
+  fi
 
   # Nothing above is much use on its own: the font only dresses up the fallback
   # picker, and freeing Super+. leaves the chord dead until something claims it.
@@ -780,6 +822,7 @@ ${C_GREEN}───────────────────────�
   emoji font       ${EMOJI_FONT_CHOICE:-not configured}
   emoji hotkey     ${EMOJI_HOTKEY_CHOICE:-not configured}
   emoji picker     ${EMOJI_EXT_CHOICE:-not checked}
+  ext manager      ${EMOJI_MGR_CHOICE:-not checked}
   ubuntu pro       ${UBUNTU_PRO_CHOICE:-not checked}
   telegram         ${TELEGRAM_CHOICE:-not configured}
   signal           $(have signal-desktop && echo 'installed' || echo 'not installed')
@@ -806,8 +849,9 @@ Next steps:
   3. Launch Claude Desktop from your app launcher, or run 'claude-desktop'.
   4. Run 'dropbox start -i' to fetch and start the sync daemon, then sign in.
   5. Install the Emoji Copy extension for Super+. (extension 6242):
-     open Extension Manager and search "Emoji Copy", then enable
-     "Paste on Select" in its preferences. Not scripted: e.g.o signs nothing.
+     open Extension Manager (installed above) and search "Emoji Copy", then
+     enable "Paste on Select" in its preferences. The extension itself is
+     deliberately not scripted: e.g.o signs nothing.
 
 Updates:
   Signal, 1Password, Dropbox, gh    ->  sudo apt update && sudo apt upgrade
