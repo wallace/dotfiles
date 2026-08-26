@@ -33,6 +33,7 @@ EMOJI_FONT_CHOICE="" # ibus emoji picker font, reported in the summary
 EMOJI_HOTKEY_CHOICE="" # ibus emoji hotkey split, reported in the summary
 EMOJI_EXT_CHOICE=""  # Emoji Copy extension presence, reported in the summary
 EMOJI_MGR_CHOICE=""  # Extension Manager package state, reported in the summary
+WAYPIPE_CHOICE=""    # waypipe presence, reported in the summary
 
 # Reuse the installer functions from the minimal script by sourcing the parts
 # we need. They are duplicated here rather than extracted so each script stays
@@ -49,6 +50,33 @@ install_base() {
   # font at all, and the emoji step below would correctly skip itself forever.
   apt_install curl gnupg ca-certificates apt-transport-https fonts-noto-color-emoji
   apt_install_unless_brew vim git
+}
+
+# --- Wayland forwarding ----------------------------------------------------
+
+# waypipe is the Wayland answer to `ssh -X`: it proxies Wayland protocol
+# messages over an SSH connection, so a GUI app running on this box draws on
+# the machine you SSHed in from. On a Wayland desktop it is the right tool for
+# that job — X11 forwarding only reaches these apps through XWayland, and pays
+# a round trip per drawing operation to do it.
+#
+# One limit worth knowing before you count on it: waypipe forwards the Wayland
+# protocol, not pixels, so the machine you are VIEWING from has to speak
+# Wayland too. Linux to Linux, fine. From macOS or Windows there is no Wayland
+# compositor to receive it, and `ssh -Y` with an X server, or a remote desktop
+# session, is what actually works.
+#
+# universe, and useless on a box with no graphical session, so a failed install
+# is a warning rather than the end of the run.
+install_waypipe() {
+  step "waypipe (Wayland app forwarding over SSH)"
+  if apt_install_optional waypipe; then
+    WAYPIPE_CHOICE="installed"
+  else
+    WAYPIPE_CHOICE="not installed"
+    warn "waypipe unavailable; ssh -Y with an X server still works."
+  fi
+  return 0
 }
 
 # --- Keyboard --------------------------------------------------------------
@@ -823,6 +851,7 @@ ${C_GREEN}───────────────────────�
   emoji hotkey     ${EMOJI_HOTKEY_CHOICE:-not configured}
   emoji picker     ${EMOJI_EXT_CHOICE:-not checked}
   ext manager      ${EMOJI_MGR_CHOICE:-not checked}
+  waypipe          ${WAYPIPE_CHOICE:-not configured}
   ubuntu pro       ${UBUNTU_PRO_CHOICE:-not checked}
   telegram         ${TELEGRAM_CHOICE:-not configured}
   signal           $(have signal-desktop && echo 'installed' || echo 'not installed')
@@ -871,6 +900,7 @@ main() {
   note_brew
 
   install_base
+  install_waypipe
   setup_keyboard
   setup_emoji_input
   setup_ubuntu_pro
