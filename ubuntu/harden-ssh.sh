@@ -20,6 +20,9 @@
 # Environment overrides:
 #   SSH_ALLOW_FROM=<cidr>    restrict SSH to this source. Unset means anywhere,
 #                            which on a routable address means the whole internet.
+#                            Must name a network, not a host inside one:
+#                            192.168.1.5/24 is refused, because the mask turns
+#                            it into all of 192.168.1.0/24.
 #   SSH_PASSWORD_AUTH=yes    accept passwords as well as keys. Default no.
 #   SSH_PORT=<n>             listen on a non-default port. Default 22.
 #   SSH_ALLOW_USERS="a b"    accounts permitted to log in. Default: you alone.
@@ -82,14 +85,82 @@ validate_inputs() {
      to something that includes an account you can reach." ;;
   esac
 
-  # ufw rejects a malformed CIDR with a usage message and a zero exit in some
-  # versions, which would leave us "allowing" nothing at all. Check it here
-  # where we can still refuse to continue.
   if [ -n "$SSH_ALLOW_FROM" ]; then
-    case "$SSH_ALLOW_FROM" in
-      */*) : ;;
-      *) die "SSH_ALLOW_FROM must be a CIDR block such as 192.168.1.0/24, got '$SSH_ALLOW_FROM'." ;;
+    validate_cidr "$SSH_ALLOW_FROM"
+  fi
+}
+
+# ufw rejects a malformed CIDR with a usage message and a zero exit in some
+# versions, which would leave us "allowing" nothing at all. Check it here
+# where we can still refuse to continue.
+#
+# "Does it contain a slash" is not enough, because the two ways to get this
+# subtly wrong are both silent and land on opposite sides of what you wanted:
+#
+#   192.168.1.0/99   nonsense prefix. Nothing matches the rule, and SSH ends
+#                    up firewalled off from every source including yours.
+#   192.168.1.5/24   host bits set. The mask discards them, so this quietly
+#                    means all of 192.168.1.0/24 — 253 hosts more than the one
+#                    you named. Widening an access rule by accident is exactly
+#                    what this script exists to stop.
+#
+# Both are refused, naming the block the input would actually have meant, so
+# the correction is obvious rather than a puzzle.
+#
+# Leading zeros are refused too: 010.1.1.1 is not 10.1.1.1 to a shell doing
+# arithmetic, it is octal 8, and inet_pton has rejected that form for years.
+validate_cidr() {
+  local cidr="$1" addr prefix n
+
+  case "$cidr" in
+    */*) addr="${cidr%%/*}"; prefix="${cidr#*/}" ;;
+    *) die "SSH_ALLOW_FROM must be a CIDR block such as 192.168.1.0/24, got '$cidr'." ;;
+  esac
+
+  case "$prefix" in
+    ''|*[!0-9]*) die "SSH_ALLOW_FROM prefix must be a number: '$cidr'." ;;
+    0) : ;;
+    0*) die "SSH_ALLOW_FROM prefix has a leading zero: '$cidr'." ;;
+  esac
+
+  # IPv6 goes to ufw as-is. The host-bit arithmetic below is IPv4-only, so
+  # check the prefix range and leave the address to ufw rather than pretending
+  # to a thoroughness this function does not have.
+  case "$addr" in
+    *:*)
+      [ "$prefix" -le 128 ] \
+        || die "SSH_ALLOW_FROM prefix must be 0-128 for IPv6, got '$cidr'."
+      return 0 ;;
+  esac
+
+  [ "$prefix" -le 32 ] \
+    || die "SSH_ALLOW_FROM prefix must be 0-32 for IPv4, got '$cidr'."
+
+  local -a o=()
+  local IFS=.
+  read -r -a o <<< "$addr"
+  unset IFS
+  [ "${#o[@]}" -eq 4 ] \
+    || die "SSH_ALLOW_FROM must be a dotted quad such as 192.168.1.0/24, got '$cidr'."
+
+  for n in "${o[@]}"; do
+    case "$n" in
+      ''|*[!0-9]*) die "SSH_ALLOW_FROM has a non-numeric octet: '$cidr'." ;;
+      0) : ;;
+      0*) die "SSH_ALLOW_FROM has an octet with a leading zero: '$cidr'." ;;
     esac
+    [ "$n" -le 255 ] || die "SSH_ALLOW_FROM octet out of range (0-255): '$cidr'."
+  done
+
+  # Host bits: build the 32-bit value, mask it, and see if anything was lost.
+  local ip=$(( (o[0] << 24) | (o[1] << 16) | (o[2] << 8) | o[3] ))
+  local mask=0
+  [ "$prefix" -gt 0 ] && mask=$(( (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF ))
+  local net=$(( ip & mask ))
+  if [ "$net" -ne "$ip" ]; then
+    die "SSH_ALLOW_FROM has host bits set: '$cidr'.
+     ufw would widen this to $(( (net >> 24) & 255 )).$(( (net >> 16) & 255 )).$(( (net >> 8) & 255 )).$(( net & 255 ))/$prefix.
+     Write that if you meant the block, or $addr/32 if you meant the one host."
   fi
 }
 

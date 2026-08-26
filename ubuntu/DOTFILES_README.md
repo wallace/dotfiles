@@ -153,7 +153,7 @@ That leaves sshd reachable over the tailnet and closed to the internet. Bring
 Tailscale up *first*: `harden-ssh.sh` enables ufw immediately, and refuses to
 do it over a remote session whose client IP is outside the allowed block.
 
-Four things this script handles that a hand-rolled version usually doesn't:
+Five things this script handles that a hand-rolled version usually doesn't:
 
 - **Lockout by empty `authorized_keys`.** With passwords off, `authorized_keys`
   is the only way in — and on a fresh box it's empty. The script counts real
@@ -173,6 +173,13 @@ Four things this script handles that a hand-rolled version usually doesn't:
 - **Lockout refusal.** If it's running over SSH and `SSH_ALLOW_FROM` might not
   contain the current client, it stops and asks — and with no terminal to ask
   on, it aborts rather than guessing.
+- **CIDRs that are wrong in silence.** `SSH_ALLOW_FROM` is validated properly,
+  not just checked for a slash. `192.168.1.0/99` would make the rule match
+  nothing and firewall SSH off from everyone; `192.168.1.5/24` has host bits
+  the mask discards, so it quietly means all 254 addresses rather than the one
+  you named. Both are refused, naming the block the input would really have
+  meant. Leading zeros go too — `010.1.1.1` is octal to a shell doing
+  arithmetic, and `inet_pton` has rejected the form for years.
 
 Socket activation is handled too: on Ubuntu 22.10+ `ssh` is socket-activated, so
 restarting `ssh.service` alone leaves the old port bound.
