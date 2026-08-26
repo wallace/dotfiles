@@ -571,7 +571,8 @@ install_obsidian() {
   local tmp=""
   tmp="$(mktemp -d)" || { warn "mktemp failed; skipping Obsidian."; return 0; }
   # shellcheck disable=SC2064
-  trap "rm -rf '$tmp'" RETURN EXIT
+  trap "rm -rf '$tmp'" RETURN
+  on_exit "rm -rf '$tmp'"
   # apt drops to the _apt user to read the file and warns about an unsandboxed
   # download when it cannot, so make the path readable rather than 0700.
   chmod 0755 "$tmp"

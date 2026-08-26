@@ -60,6 +60,21 @@ die()  { printf '%sfail%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; exit 1; }
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# --- Cleanup ---------------------------------------------------------------
+#
+# One EXIT trap for the whole run, with a list of things to run under it.
+# Bash allows a single handler per signal, so functions that each installed
+# their own `trap ... EXIT` silently replaced whatever the last one set — the
+# temp-file cleanups and the sudo keepalive below would take turns clobbering
+# each other. Registering hooks here means every one of them runs.
+_EXIT_HOOKS=()
+on_exit() { _EXIT_HOOKS+=("$1"); }
+_run_exit_hooks() {
+  local h
+  for h in ${_EXIT_HOOKS[@]+"${_EXIT_HOOKS[@]}"}; do eval "$h" || true; done
+}
+trap _run_exit_hooks EXIT
+
 # --- Preflight -------------------------------------------------------------
 
 require_ubuntu() {
@@ -95,6 +110,43 @@ require_sudo() {
     fi
   fi
   ok "sudo available"
+  start_sudo_keepalive
+}
+
+# Priming the timestamp once is not enough to get through a full run. sudo
+# forgets it after 15 minutes by default, and this script spends far longer
+# than that between sudo calls: a ~100MB Obsidian download, apt fetching
+# Signal and 1Password, a Nativefier build, and however long you take over the
+# interactive prompts. Every gap longer than the timeout costs another password
+# prompt, in the middle of a run that has no business asking again.
+#
+# So refresh it in the background until the script exits. The loop is careful
+# in three ways: `sudo -n` never prompts, so it cannot steal the terminal or
+# hang a non-interactive run; it stops the moment a refresh fails (revoked
+# credentials, or a `sudo -K` from elsewhere) rather than retrying forever; and
+# it checks the parent is still alive each pass, so a hard kill of the script
+# cannot leave it refreshing sudo behind your back.
+_SUDO_KEEPALIVE_PID=""
+start_sudo_keepalive() {
+  [ -z "$_SUDO_KEEPALIVE_PID" ] || return 0
+  (
+    while true; do
+      sudo -n true 2>/dev/null || exit 0
+      sleep 50
+      # $$ is the script's pid even in this subshell; $BASHPID is our own.
+      kill -0 "$$" 2>/dev/null || exit 0
+    done
+  ) &
+  _SUDO_KEEPALIVE_PID=$!
+  # Off the job table, so bash prints no "Terminated" line when we kill it.
+  disown "$_SUDO_KEEPALIVE_PID" 2>/dev/null || true
+  on_exit stop_sudo_keepalive
+}
+
+stop_sudo_keepalive() {
+  [ -n "$_SUDO_KEEPALIVE_PID" ] || return 0
+  kill "$_SUDO_KEEPALIVE_PID" 2>/dev/null || true
+  _SUDO_KEEPALIVE_PID=""
 }
 
 require_tools() {
@@ -223,7 +275,8 @@ install_keyring() {
   tmp="$(mktemp)" || die "mktemp failed"
   # Cleaned up on return, and on exit too, since die() leaves via exit.
   # shellcheck disable=SC2064
-  trap "rm -f '$tmp'" RETURN EXIT
+  trap "rm -f '$tmp'" RETURN
+  on_exit "rm -f '$tmp'"
 
   curl -fsSL --proto '=https' --tlsv1.2 "$url" -o "$tmp" \
     || die "could not download signing key from $url"
