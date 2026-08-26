@@ -542,23 +542,49 @@ install_obsidian() {
     return 0
   fi
 
-  step "Resolving the latest Obsidian release"
+  # Resolving the version is the part that needs care. GitHub's "latest
+  # release" for this repo is NOT the latest desktop release: Obsidian ships
+  # mobile out of the same repo, and an Android-only release — one .apk, no
+  # .deb — takes the latest flag whenever it lands last. v1.13.8 did exactly
+  # that over desktop's 1.13.7, and asking /releases/latest for a .deb then
+  # finds nothing and skips the install.
+  #
+  # So ask the desktop channel's own manifest, which is what Obsidian itself
+  # checks for updates, and fall back to scanning the release list for the
+  # newest entry that actually carries an amd64 .deb.
+  step "Resolving the latest Obsidian desktop release"
   local url="" ver=""
-  url="$(curl -fsSL --proto '=https' --tlsv1.2 \
-        https://api.github.com/repos/obsidianmd/obsidian-releases/releases/latest 2>/dev/null \
-        | grep -oE '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]+/obsidian_[0-9.]+_amd64\.deb"' \
+  ver="$(curl -fsSL --proto '=https' --tlsv1.2 \
+        https://raw.githubusercontent.com/obsidianmd/obsidian-releases/master/desktop-releases.json 2>/dev/null \
+        | grep -oE '"latestVersion"[[:space:]]*:[[:space:]]*"[0-9]+(\.[0-9]+)*"' \
         | head -n1 | cut -d'"' -f4 || true)"
+  if [ -n "$ver" ]; then
+    url="https://github.com/obsidianmd/obsidian-releases/releases/download/v${ver}/obsidian_${ver}_amd64.deb"
+    # The manifest names a version, not an asset, so confirm the .deb is
+    # really published for it before we commit to that URL.
+    if ! curl -fsSL --proto '=https' --tlsv1.2 -I -o /dev/null "$url" 2>/dev/null; then
+      warn "desktop manifest names $ver, but no amd64 .deb is published for it"
+      url="" ver=""
+    fi
+  fi
+
   if [ -z "$url" ]; then
-    warn "could not resolve an amd64 .deb from the latest Obsidian release."
+    step "Falling back to the newest release carrying an amd64 .deb"
+    # Newest first, so the first .deb in the list is the current one.
+    url="$(curl -fsSL --proto '=https' --tlsv1.2 \
+          'https://api.github.com/repos/obsidianmd/obsidian-releases/releases?per_page=30' 2>/dev/null \
+          | grep -oE '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]+/obsidian_[0-9.]+_amd64\.deb"' \
+          | head -n1 | cut -d'"' -f4 || true)"
+    ver="$(printf '%s\n' "$url" | sed -n 's|.*/obsidian_\([0-9.]*\)_amd64\.deb$|\1|p')"
+  fi
+
+  if [ -z "$url" ] || [ -z "$ver" ]; then
+    warn "could not resolve an amd64 .deb from Obsidian's releases."
     warn "GitHub rate-limits unauthenticated API calls; try again later, or take"
     warn "the package from https://obsidian.md/download by hand."
     return 0
   fi
-  ver="$(printf '%s\n' "$url" | sed -n 's|.*/obsidian_\([0-9.]*\)_amd64\.deb$|\1|p')"
-  if [ -z "$ver" ]; then
-    warn "unexpected asset name, refusing to guess a version: $url"
-    return 0
-  fi
+  ok "latest desktop release is $ver"
 
   local cur=""
   cur="$(dpkg-query -W -f='${Version}' obsidian 2>/dev/null)" || cur=""
