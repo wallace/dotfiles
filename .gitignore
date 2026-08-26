@@ -139,6 +139,12 @@ rbenv/.rbenv/versions/
 rbenv/.rbenv/shims/
 rbenv/.rbenv/version
 
+# Claude Code's installer drops a launcher symlink into the copilot-cli stow
+# package, pointing at a version-pinned absolute path under
+# ~/.local/share/claude/versions/. It is machine-local and goes stale on every
+# Claude update, so it is generated state rather than configuration.
+copilot-cli/.local/bin/claude
+
 # Mail working files. ~/.mutt is a stow symlink back into this repo, so
 # neomutt's message cache and temp files land *inside the working tree*.
 # Ignore the contents while keeping the directories themselves tracked --
