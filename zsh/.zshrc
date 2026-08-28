@@ -1,35 +1,61 @@
 export ZSH="$HOME/.oh-my-zsh"
 
+# One OS probe, set before anything branches on it. $OSTYPE is a zsh builtin,
+# so this costs no subshell -- the $(uname) calls it replaces ran on every
+# shell start.
+IS_MACOS=0; IS_LINUX=0
+case "$OSTYPE" in
+  darwin*) IS_MACOS=1 ;;
+  linux*)  IS_LINUX=1 ;;
+esac
+
 # Consolidate all PATH exports at the beginning
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$HOME/bin:$PATH"
 export PATH="$BUN_INSTALL/bin:$PATH"
-export PATH="/opt/homebrew/opt/postgresql@18/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$HOME/.rbenv/shims:$PATH"
 export PATH="$HOME/.nodenv/shims:$PATH"
-export PATH="/opt/homebrew/opt/mysql@5.7/bin:$PATH"
-# restic repository for mail-backup, on the T9 external drive. The script exits
-# cleanly when the drive is not plugged in, so this is safe to always export.
-export MAIL_BACKUP_REPO="/run/media/$USER/T9/mail-restic"
 
 export GOPATH="$HOME/go"
 export PATH="$PATH:${GOPATH}/bin"
 export PYENV_ROOT="$HOME/.pyenv"
 export PATH="$PYENV_ROOT/bin:$PATH"
 export PATH="$PATH:$HOME/.maestro/bin"
-export ANDROID_HOME=$HOME/Library/Android/sdk
-export PATH="$PATH:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools"
+
+# macOS-only paths. Every one of these is a Homebrew prefix or a ~/Library
+# location that does not exist on Linux: exporting them on phoenix points
+# JAVA_HOME and DOTNET_ROOT at nothing and pads PATH with directories that
+# never resolve. bash/.bash_profile has gated its equivalent block on
+# `uname = Darwin` for a while; this brings .zshrc in line.
+if (( IS_MACOS )); then
+    export PATH="/opt/homebrew/opt/postgresql@18/bin:$PATH"
+    export PATH="/opt/homebrew/opt/mysql@5.7/bin:$PATH"
+    export JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home
+    export GEOS_LIBRARY_PATH=/opt/homebrew/lib
+    export DOTNET_ROOT="/opt/homebrew/opt/dotnet/libexec"
+    export ANDROID_HOME="$HOME/Library/Android/sdk"
+    export PATH="$PATH:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools"
+fi
+
+# Linux-only paths -- the mirror image of the block above.
+if (( IS_LINUX )); then
+    # restic repository for mail-backup, on the T9 external drive. udisks
+    # mounts removable media under /run/media, which is a Linux-only
+    # convention. mail-backup exits cleanly when the drive is not plugged in,
+    # so this is safe to export whenever we are on Linux.
+    export MAIL_BACKUP_REPO="/run/media/$USER/T9/mail-restic"
+fi
 
 # Check if system is Linux/Ubuntu (only init brew if installed)
-if [[ $(uname) == "Linux" ]] && [ -x "/home/linuxbrew/.linuxbrew/bin/brew" ]; then
+if (( IS_LINUX )) && [ -x "/home/linuxbrew/.linuxbrew/bin/brew" ]; then
     eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 fi
 
 ZSH_THEME=""
 
 # Pure prompt setup
-if [[ $(uname) == "Linux" ]]; then
+if (( IS_LINUX )); then
     [ -d "/home/linuxbrew/.linuxbrew/share/zsh/site-functions" ] \
         && fpath+=("/home/linuxbrew/.linuxbrew/share/zsh/site-functions")
     [ -d "$HOME/.zsh/pure" ] && fpath+=("$HOME/.zsh/pure")
@@ -88,7 +114,7 @@ fi
 export EDITOR=nvim
 
 # Aliases
-if [[ $(uname) == "Darwin" ]]; then
+if (( IS_MACOS )); then
     alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
 fi
 
@@ -113,8 +139,6 @@ bindkey '^R' history-incremental-search-backward
 bindkey -M vicmd v edit-command-line
 
 # Additional environment variables
-export JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home
-export GEOS_LIBRARY_PATH=/opt/homebrew/lib
 export COMPOSE_PROFILES="tourneys,frontend"
 
 # Source codespaces related things if we are in one
@@ -138,10 +162,7 @@ fi
 # WSL2 handling above is the only case where we manage the socket ourselves.
 
 # bun completions
-[ -s "/Users/jonathanwallace/.bun/_bun" ] && source "/Users/jonathanwallace/.bun/_bun"
-
-# bun
-export DOTNET_ROOT="/opt/homebrew/opt/dotnet/libexec"
+[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
 
 # Git rebase function - checkout main, pull, checkout branch, rebase main, and force push
 grebase() {
@@ -201,8 +222,8 @@ alias copilot='copilot --disable-builtin-mcps'
 # 1Password's SSH agent, for tools that don't read ~/.ssh/config (which does
 # set IdentityAgent). The socket is in a different place on each OS and this
 # file is stowed on both, so branch rather than hardcoding the Linux path.
-if [[ $(uname) == "Darwin" ]]; then
+if (( IS_MACOS )); then
     export SSH_AUTH_SOCK="$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
-elif [[ $(uname) == "Linux" ]]; then
+elif (( IS_LINUX )); then
     export SSH_AUTH_SOCK="$HOME/.1password/agent.sock"
 fi
