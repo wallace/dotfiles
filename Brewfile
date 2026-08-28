@@ -57,20 +57,19 @@ end
 
 # macOS only (no Linux bottles available)
 if OS.mac?
-  # Dropbox and Obsidian are deliberately absent. They are installed by hand
-  # on this machine, so listing them here only made `brew bundle` fight the
-  # existing installs -- `check` reported them unsatisfied whatever their real
-  # state. On Ubuntu they come from ubuntu/provision.sh instead: Dropbox from
-  # its signed apt repo, Obsidian from the desktop .deb channel. So neither
-  # machine wants them here, for opposite reasons.
+  # No GUI apps, deliberately. Dropbox, Obsidian and kitty are all installed by
+  # hand on this machine, and naming them here only made `brew bundle` fight
+  # those installs: Homebrew will not take over an app already sitting in
+  # /Applications, so `check` reported each one unsatisfied whatever its real
+  # state, and `install` kept trying to place a second copy.
   #
-  # The terminal, which is the one GUI app that does come from Homebrew. It
-  # only ever runs here: phoenix is reached over ssh from this machine and has
-  # no terminal emulator of its own, so there is deliberately no kitty in
-  # ubuntu/provision.sh. The kitty under ~/.local/share/kitty-ssh-kitten on
-  # phoenix is payload the `kitten ssh` command pushes there for terminfo, not
-  # an install to manage.
-  cask "kitty"
+  # On Ubuntu the same three are somebody else's job. ubuntu/provision.sh
+  # pulls Dropbox from its signed apt repo and Obsidian from the desktop .deb
+  # channel. kitty is absent there on purpose: phoenix has no terminal
+  # emulator at all, being reached over ssh from this machine, and the kitty
+  # under ~/.local/share/kitty-ssh-kitten there is payload that `kitten ssh`
+  # pushes for terminfo, not an install to manage.
+  #
   # Required for tmux copy/paste on macOS
   brew "reattach-to-user-namespace"
   # https://github.com/zerowidth/zoom-calendar.alfredworkflow
