@@ -57,16 +57,19 @@ end
 
 # macOS only (no Linux bottles available)
 if OS.mac?
-  # GUI apps. On Ubuntu these come from ubuntu/provision.sh instead: Dropbox
-  # from its signed apt repo, Obsidian from Obsidian's own .deb, since casks
-  # are macOS-only and Linuxbrew has neither.
-  cask "dropbox"
-  cask "obsidian"
-  # The terminal. Only ever runs here: phoenix is reached over ssh from this
-  # machine and has no terminal emulator of its own, so there is deliberately
-  # no kitty in ubuntu/provision.sh. The kitty under
-  # ~/.local/share/kitty-ssh-kitten on phoenix is payload the `kitten ssh`
-  # command pushes there for terminfo, not an install to manage.
+  # Dropbox and Obsidian are deliberately absent. They are installed by hand
+  # on this machine, so listing them here only made `brew bundle` fight the
+  # existing installs -- `check` reported them unsatisfied whatever their real
+  # state. On Ubuntu they come from ubuntu/provision.sh instead: Dropbox from
+  # its signed apt repo, Obsidian from the desktop .deb channel. So neither
+  # machine wants them here, for opposite reasons.
+  #
+  # The terminal, which is the one GUI app that does come from Homebrew. It
+  # only ever runs here: phoenix is reached over ssh from this machine and has
+  # no terminal emulator of its own, so there is deliberately no kitty in
+  # ubuntu/provision.sh. The kitty under ~/.local/share/kitty-ssh-kitten on
+  # phoenix is payload the `kitten ssh` command pushes there for terminfo, not
+  # an install to manage.
   cask "kitty"
   # Required for tmux copy/paste on macOS
   brew "reattach-to-user-namespace"
