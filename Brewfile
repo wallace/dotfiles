@@ -23,24 +23,37 @@ brew "neovim"
 # github sql primer
 brew "git-lfs"
 
-# Mail: neomutt reads a local Maildir that isync (mbsync) fills from Gmail,
-# notmuch indexes, and msmtp sends through. w3m renders HTML mail via
-# ~/.mutt/mailcap; libsecret provides secret-tool, which holds the Gmail App
-# Password that both mbsync and msmtp read.
-brew "neomutt"
-brew "urlview"
-brew "w3m"
-brew "libsecret"
-brew "notmuch"
-brew "isync"
-brew "msmtp"
-# Backups of ~/.mail. Once old mail is deleted from Gmail to reclaim Google
-# storage, the local Maildir stops having a second copy anywhere.
-brew "restic"
-# Google Drive backups (drive-backup). Photos deliberately does NOT go through
-# rclone -- the Photos API strips EXIF location and will not serve originals,
-# so that one has to come from Takeout.
-brew "rclone"
+# Linux only. The whole mail and backup pipeline lives on phoenix: the Maildir
+# is there, the mailsync systemd timers that fill it have no launchd
+# counterpart, and the T9 external drive both backup scripts write to is
+# plugged in there -- which is why .zshrc exports MAIL_BACKUP_REPO under
+# /run/media only on Linux. Reading mail on the Mac means ssh'ing over.
+#
+# libsecret is the reason this cannot be a soft preference: mail-backup and
+# drive-backup take their restic password from `secret-tool`, and mbsync and
+# msmtp take the Gmail App Password from it too. That is the Linux login
+# keyring. The Mac equivalent is the system Keychain, which none of these
+# scripts speak.
+if OS.linux?
+  # Mail: neomutt reads a local Maildir that isync (mbsync) fills from Gmail,
+  # notmuch indexes, and msmtp sends through. w3m renders HTML mail via
+  # ~/.mutt/mailcap; libsecret provides secret-tool, which holds the Gmail App
+  # Password that both mbsync and msmtp read.
+  brew "neomutt"
+  brew "urlview"
+  brew "w3m"
+  brew "libsecret"
+  brew "notmuch"
+  brew "isync"
+  brew "msmtp"
+  # Backups of ~/.mail. Once old mail is deleted from Gmail to reclaim Google
+  # storage, the local Maildir stops having a second copy anywhere.
+  brew "restic"
+  # Google Drive backups (drive-backup). Photos deliberately does NOT go
+  # through rclone -- the Photos API strips EXIF location and will not serve
+  # originals, so that one has to come from Takeout.
+  brew "rclone"
+end
 
 # macOS only (no Linux bottles available)
 if OS.mac?
