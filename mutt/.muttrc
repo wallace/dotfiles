@@ -27,11 +27,16 @@ folder-hook . 'set read_inc=1000'
 
 # Sidebar --------------------------------------
 set sidebar_visible = yes
-set sidebar_format = "%B%?F? [%F]?%* %?N?%N/?%S"
+set sidebar_format = "%D%?F? [%F]?%* %?N?%N/?%S"
 set mail_check_stats
-# %B above is the full mailbox name, and every mailbox here starts with the
-# same 25-character `jonathanwallace-gmail.com/` prefix -- so without this the
-# only distinguishing part of the name is exactly what gets truncated away.
+# %D above rather than %B: %B is the raw mailbox name, which for the notmuch
+# searches below is the whole URL, so the sidebar showed "query=tag:unre"
+# instead of "Unread". %D is the descriptive name -- the label given to
+# named-mailboxes -- and falls back to the mailbox name for plain Maildirs.
+#
+# Those Maildirs all begin with the same 25-character `jonathanwallace-gmail.com/`
+# prefix, so without short_path the one distinguishing part of the name is
+# exactly what gets truncated away.
 set sidebar_short_path
 set sidebar_width = 22
 
@@ -58,11 +63,59 @@ mailboxes +jonathanwallace-gmail.com/INBOX \
           +jonathanwallace-gmail.com/archive \
           +jonathanwallace-gmail.com/sent \
           +jonathanwallace-gmail.com/drafts \
-          +jonathanwallace-gmail.com/flagged \
+          +jonathanwallace-gmail.com/flagged
+
+# Notmuch --------------------------------------------
+# Gmail's labels never make it over IMAP -- mbsync writes each message to disk
+# with no record of which ones it carried -- so `mail-labels` pulls them from
+# Gmail's X-GM-RAW extension and applies them as gmail/-prefixed notmuch tags.
+# Everything below is what surfaces those tags inside neomutt. Without it the
+# notmuch database mailsync has been maintaining all along stays invisible
+# here: neomutt only ever opens the plain Maildir directories listed above.
+
+# Absolute path required -- unlike `folder` above, a leading ~ is rejected
+# outright. $HOME does get expanded, which keeps this off a hard-coded
+# /home/jrw and portable to the mac.
+set nm_default_url = "notmuch://$HOME/.mail/jonathanwallace-gmail.com"
+
+# Mirrors [search] exclude_tags in ~/.notmuch-config, so the same query returns
+# the same messages here and on the command line.
+set nm_exclude_tags = "deleted spam"
+
+# The 5s default is a cold-cache gamble on a database this size; All Mail alone
+# is heading for 40k messages.
+set nm_open_timeout = 30
+
+# Saved searches, listed in the sidebar beneath the Maildir folders. All
+# three work today, and each one crosses folder boundaries in a way no
+# Maildir entry above can -- a `flagged` search is left out precisely
+# because the Maildir folder of that name already is one.
+#
+# Label-backed searches need `mail-labels` to have run first, since until
+# then no gmail/ tag exists for a query to match, and then take the same
+# shape:
+#
+#   named-mailboxes "Taxes" "notmuch://?query=tag:gmail/2020-taxes"
+#
+named-mailboxes "Attachments" "notmuch://?query=tag:attachment"
+named-mailboxes "Unread"      "notmuch://?query=tag:unread"
+named-mailboxes "Last 7 days" "notmuch://?query=date:7d.."
+
+# X is the one that earns its keep: it prompts for any notmuch query and opens
+# the results as a folder, so a label is reachable without a sidebar entry of
+# its own. L edits tags on the selected message. Both are notmuch-only and do
+# nothing in a Maildir folder.
+bind index,pager X   vfolder-from-query
+bind index,pager L   modify-labels
+bind index,pager \Ct entire-thread
 
 # Index View Options ---------------------------------
 set date_format = "%m/%d"
-set index_format = "[%Z]  %D  %-20.20F  %s"
+# %g appends the message's notmuch tags, which is where gmail/ labels show
+# up once mail-labels has run. Right-justified with %> because tag lists
+# vary wildly in length -- inline, they would start every subject in a
+# different column.
+set index_format = "[%Z]  %D  %-20.20F  %s %> %g"
 set sort = threads                         # like gmail
 set sort_aux = reverse-last-date-received  # like gmail
 set uncollapse_jump                        # don't collapse on an unread message
