@@ -49,6 +49,12 @@ if OS.mac?
   # are macOS-only and Linuxbrew has neither.
   cask "dropbox"
   cask "obsidian"
+  # The terminal. Only ever runs here: phoenix is reached over ssh from this
+  # machine and has no terminal emulator of its own, so there is deliberately
+  # no kitty in ubuntu/provision.sh. The kitty under
+  # ~/.local/share/kitty-ssh-kitten on phoenix is payload the `kitten ssh`
+  # command pushes there for terminfo, not an install to manage.
+  cask "kitty"
   # Required for tmux copy/paste on macOS
   brew "reattach-to-user-namespace"
   # https://github.com/zerowidth/zoom-calendar.alfredworkflow
