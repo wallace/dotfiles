@@ -483,15 +483,20 @@ is hardcoded.
 
 ### claude-tmux-name
 
-Keeps the tmux session name matching the name of the Claude Code session running in it,
-so a stack of detached sessions reads as `settleup` / `dotfiles` rather than `0` / `1`.
+Names each tmux window after the Claude Code session running in it, so the status bar
+reads `1 settleup  2 sys-health` instead of three windows all called `claude`.
 
 No scraping involved: every live claude writes `~/.claude/sessions/<pid>.json`, which
 already carries `name` (the TUI session name), `nameSource` (`user` if set with
 `/rename`, otherwise `derived`) and `tmux` (`<session>:<window-id>.<pane-id>`). The
 script reads those records, drops any whose pid is no longer running — pane ids get
-recycled, so a stale record would rename an innocent session — and renames each hosting
-tmux session.
+recycled, so a stale record would rename an innocent window — and renames the window
+around each pane.
+
+Claude does set the *pane* title itself, but to a summary of the conversation rather
+than the session name, and pane titles are invisible unless `pane-border-status` is on.
+The window name is what `window-status-format` renders as `#W`, which is why that is
+what this syncs.
 
 `stow claude` links `bin/claude-tmux-name` → `~/bin/claude-tmux-name`. Wiring:
 
@@ -507,14 +512,16 @@ $ claude-tmux-name --all    # sweep every live claude session
 $ claude-tmux-name --clear  # drop the window override (SCOPE=window only)
 ```
 
-Env knobs: `CLAUDE_TMUX_NAME_SCOPE=session|window` (default `session`; `window` renames
-the window instead and suppresses tmux's `automatic-rename` for it),
-`CLAUDE_TMUX_NAME_PREFIX` to prepend something like `cc:`, and
-`CLAUDE_TMUX_NAME_ONLY_USER=1` to ignore auto-derived names and only follow `/rename`.
+Env knobs: `CLAUDE_TMUX_NAME_SCOPE=window|session` (default `window`; renaming a window
+explicitly turns tmux's `automatic-rename` off for it, which is what makes the name
+stick), `CLAUDE_TMUX_NAME_PREFIX` to prepend something like `cc:`, and
+`CLAUDE_TMUX_NAME_ONLY_USER=1` to ignore auto-derived names like `jrw-9c` and only
+follow `/rename`.
 
-Session scope assumes one claude per tmux session. If two ever share one they would
-fight over the name on every hook, so the script detects that, leaves the name alone and
-says which session it skipped.
+`SCOPE=session` renames the whole tmux session instead, for the one-claude-per-session
+arrangement. That assumes exactly that: if two claudes ever share a tmux session they
+would fight over the name on every hook, so the script detects it, leaves the name alone
+and says which session it skipped.
 
 ## Platform Notes
 
