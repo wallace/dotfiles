@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Keep the tmux session name in sync with the Claude Code session name.
+# Keep the tmux window name in sync with the Claude Code session name.
 #
 # Claude Code writes ~/.claude/sessions/<pid>.json for every live session, and
 # that file already carries everything needed:
@@ -12,13 +12,18 @@
 # Modes:
 #   (no args)  rename around *this* claude session; meant to be run from a
 #              claude hook, where CLAUDE_PID is exported.
-#   --all      sweep every live claude session and rename each one's tmux
-#              session. Safe to run from anywhere inside tmux.
+#   --all      sweep every live claude session and rename each one's window.
+#              Safe to run from anywhere inside tmux.
 #   --clear    drop this window's rename override, handing it back to tmux's
 #              automatic-rename. Only meaningful under SCOPE=window.
 #
+# Claude sets the *pane* title itself (to a summary of the conversation, not
+# the session name), but pane titles only show with pane-border-status on. The
+# window name is what window-status-format renders in the status bar, which is
+# why that is the default scope here.
+#
 # Env knobs:
-#   CLAUDE_TMUX_NAME_SCOPE=session|window   what to rename (default: session)
+#   CLAUDE_TMUX_NAME_SCOPE=window|session   what to rename (default: window)
 #   CLAUDE_TMUX_NAME_PREFIX=str             prepended to the name, e.g. "cc:"
 #   CLAUDE_TMUX_NAME_ONLY_USER=1            ignore auto-derived names
 set -uo pipefail
@@ -28,7 +33,7 @@ command -v tmux >/dev/null 2>&1 || exit 0
 command -v jq   >/dev/null 2>&1 || exit 0
 
 sessions_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/sessions"
-scope="${CLAUDE_TMUX_NAME_SCOPE:-session}"
+scope="${CLAUDE_TMUX_NAME_SCOPE:-window}"
 prefix="${CLAUDE_TMUX_NAME_PREFIX:-}"
 only_user="${CLAUDE_TMUX_NAME_ONLY_USER:-0}"
 
