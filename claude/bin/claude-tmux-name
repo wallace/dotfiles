@@ -17,10 +17,12 @@
 #   --clear    drop this window's rename override, handing it back to tmux's
 #              automatic-rename. Only meaningful under SCOPE=window.
 #
-# Claude sets the *pane* title itself (to a summary of the conversation, not
-# the session name), but pane titles only show with pane-border-status on. The
-# window name is what window-status-format renders in the status bar, which is
-# why that is the default scope here.
+# The window name comes from claude's own pane title where there is one --
+# "✳ settleup" once named, "✳ <summary>" until then -- so #W agrees with what
+# the pane border and the status bar already show. .name from the json is the
+# fallback, and is what session scope uses. The difference matters: an unnamed
+# session's .name is a slug like jrw-9c, while its title is a summary of the
+# conversation.
 #
 # Env knobs:
 #   CLAUDE_TMUX_NAME_SCOPE=window|session   what to rename (default: window)
@@ -90,10 +92,20 @@ if [ "$scope" = session ]; then
 fi
 
 apply() {  # apply <pane-id> <name>
-  local pane="$1" name tsid
+  local pane="$1" name tsid title
+  pane_alive "$pane" || return 0
+
+  if [ "$scope" = window ]; then
+    # Prefer the live pane title: claude rewrites it on /rename, whereas the
+    # json record this ran from is only as fresh as the hook that fired it.
+    title="$(tmux display-message -p -t "$pane" '#{pane_title}' 2>/dev/null)"
+    case "$title" in
+      '✳ '*) set -- "$1" "${title#✳ }" ;;
+    esac
+  fi
+
   name="$(sanitize "${prefix}$2")"
   [ -n "$name" ] || return 0
-  pane_alive "$pane" || return 0
 
   if [ "$scope" = window ]; then
     # An explicit rename-window turns automatic-rename off for that window, so

@@ -493,10 +493,16 @@ script reads those records, drops any whose pid is no longer running — pane id
 recycled, so a stale record would rename an innocent window — and renames the window
 around each pane.
 
-Claude does set the *pane* title itself, but to a summary of the conversation rather
-than the session name, and pane titles are invisible unless `pane-border-status` is on.
-The window name is what `window-status-format` renders as `#W`, which is why that is
-what this syncs.
+Claude sets the *pane* title itself — the session name once you `/rename`, a summary of
+the conversation while the name is still auto-derived — and rewrites it the moment
+either changes. `pane-border-status top` shows that above each pane, and the status bar
+tracks the same string through `@wname` in `tmux/.tmux.conf`, so a `/rename` lands top
+and bottom at once. `#W` alone would lag: nothing renames a window on its own, so it
+holds whatever the last hook set.
+
+The script is what keeps `#W` itself honest, for `prefix-w`, `tmux ls` and anything else
+reading window names. It takes the name from the same pane title where there is one and
+falls back to the json `name`, so every place a session is named agrees.
 
 `stow claude` links `bin/claude-tmux-name` → `~/bin/claude-tmux-name`. Wiring:
 
