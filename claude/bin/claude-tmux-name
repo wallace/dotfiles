@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# Keep the tmux session name in sync with the Claude Code session name.
+#
+# Claude Code writes ~/.claude/sessions/<pid>.json for every live session, and
+# that file already carries everything needed:
+#
+#   pid         the claude process, so stale records can be dropped
+#   name        the session name shown in the TUI ("settleup")
+#   nameSource  "user" if set via /rename, "derived" if auto-generated
+#   tmux        "<tmux-session>:<window-id>.<pane-id>", e.g. "0:@1.%1"
+#
+# Modes:
+#   (no args)  rename around *this* claude session; meant to be run from a
+#              claude hook, where CLAUDE_PID is exported.
+#   --all      sweep every live claude session and rename each one's tmux
+#              session. Safe to run from anywhere inside tmux.
+#   --clear    drop this window's rename override, handing it back to tmux's
+#              automatic-rename. Only meaningful under SCOPE=window.
+#
+# Env knobs:
+#   CLAUDE_TMUX_NAME_SCOPE=session|window   what to rename (default: session)
+#   CLAUDE_TMUX_NAME_PREFIX=str             prepended to the name, e.g. "cc:"
+#   CLAUDE_TMUX_NAME_ONLY_USER=1            ignore auto-derived names
+set -uo pipefail
+
+[ -n "${TMUX:-}" ] || exit 0
+command -v tmux >/dev/null 2>&1 || exit 0
+command -v jq   >/dev/null 2>&1 || exit 0
+
+sessions_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/sessions"
+scope="${CLAUDE_TMUX_NAME_SCOPE:-session}"
+prefix="${CLAUDE_TMUX_NAME_PREFIX:-}"
+only_user="${CLAUDE_TMUX_NAME_ONLY_USER:-0}"
+
+# tmux names are a single line; strip control characters and keep them short
+# enough to stay readable in the status bar.
+sanitize() { printf '%s' "$1" | tr -d '\000-\037' | cut -c1-40; }
+
+# "<pid>\t<pane-id>\t<name>" per named, still-running claude session.
+records() {
+  local f pid pane name
+  for f in "$sessions_dir"/*.json; do
+    [ -e "$f" ] || continue
+    while IFS=$'\t' read -r pid pane name; do
+      [ -n "${pid:-}" ] || continue
+      # The sessions directory keeps records for sessions that have exited;
+      # their pane ids get recycled, so only trust records with a live pid.
+      kill -0 "$pid" 2>/dev/null || continue
+      printf '%s\t%s\t%s\n' "$pid" "$pane" "$name"
+    done < <(jq -r --argjson onlyuser "$only_user" '
+      select(.name != null and .name != "")
+      | select($onlyuser == 0 or .nameSource == "user")
+      | select(.tmux != null and .pid != null)
+      | "\(.pid)\t\(.tmux | split(".") | last)\t\(.name)"
+    ' "$f" 2>/dev/null)
+  done
+}
+
+if [ "${1:-}" = --clear ]; then
+  # tmux sessions have no automatic-rename to restore, so this only undoes the
+  # per-window override taken out under SCOPE=window.
+  [ "$scope" = window ] && [ -n "${TMUX_PANE:-}" ] &&
+    tmux set-option -w -t "$TMUX_PANE" -u automatic-rename 2>/dev/null
+  exit 0
+fi
+
+# Panes that still exist. A record pointing at a dead pane would otherwise
+# rename whatever tmux session happens to answer to a recycled id.
+live_panes="$(tmux list-panes -a -F '#{pane_id}' 2>/dev/null)"
+pane_alive() { printf '%s\n' "$live_panes" | grep -qxF "$1"; }
+
+mapfile -t recs < <(records)
+
+# One claude per tmux session is the assumption that makes session-scope
+# renaming coherent. If two ever share one, they would fight over the name on
+# every hook, so leave that tmux session's name alone and say so.
+declare -A hosts=()
+if [ "$scope" = session ]; then
+  for rec in "${recs[@]}"; do
+    IFS=$'\t' read -r _ pane _ <<<"$rec"
+    pane_alive "$pane" || continue
+    tsid="$(tmux display-message -p -t "$pane" '#{session_id}' 2>/dev/null)" || continue
+    [ -n "$tsid" ] && hosts["$tsid"]=$(( ${hosts["$tsid"]:-0} + 1 ))
+  done
+fi
+
+apply() {  # apply <pane-id> <name>
+  local pane="$1" name tsid
+  name="$(sanitize "${prefix}$2")"
+  [ -n "$name" ] || return 0
+  pane_alive "$pane" || return 0
+
+  if [ "$scope" = window ]; then
+    # An explicit rename-window turns automatic-rename off for that window, so
+    # the name sticks instead of reverting to pane_current_command.
+    tmux rename-window -t "$pane" "$name" 2>/dev/null
+    return 0
+  fi
+
+  tsid="$(tmux display-message -p -t "$pane" '#{session_id}' 2>/dev/null)"
+  if [ "${hosts["$tsid"]:-1}" -gt 1 ]; then
+    printf 'claude-tmux-name: %s hosts %d claude sessions; leaving its name alone\n' \
+      "$(tmux display-message -p -t "$pane" '#{session_name}' 2>/dev/null)" \
+      "${hosts["$tsid"]}" >&2
+    return 0
+  fi
+  tmux rename-session -t "$pane" "$name" 2>/dev/null
+}
+
+case "${1:-}" in
+  --all)
+    for rec in "${recs[@]}"; do
+      IFS=$'\t' read -r _ pane name <<<"$rec"
+      apply "$pane" "$name"
+    done
+    ;;
+  *)
+    [ -n "${CLAUDE_PID:-}" ] || exit 0
+    for rec in "${recs[@]}"; do
+      IFS=$'\t' read -r pid pane name <<<"$rec"
+      [ "$pid" = "$CLAUDE_PID" ] || continue
+      apply "${TMUX_PANE:-$pane}" "$name"
+    done
+    ;;
+esac

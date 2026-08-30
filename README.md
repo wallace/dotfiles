@@ -481,6 +481,41 @@ Obsidian vault and are `.gitignore`d; only `*.example.yaml` templates ship in th
 The launcher reads all machine/vault paths from environment variables, so no home path
 is hardcoded.
 
+### claude-tmux-name
+
+Keeps the tmux session name matching the name of the Claude Code session running in it,
+so a stack of detached sessions reads as `settleup` / `dotfiles` rather than `0` / `1`.
+
+No scraping involved: every live claude writes `~/.claude/sessions/<pid>.json`, which
+already carries `name` (the TUI session name), `nameSource` (`user` if set with
+`/rename`, otherwise `derived`) and `tmux` (`<session>:<window-id>.<pane-id>`). The
+script reads those records, drops any whose pid is no longer running — pane ids get
+recycled, so a stale record would rename an innocent session — and renames each hosting
+tmux session.
+
+`stow claude` links `bin/claude-tmux-name` → `~/bin/claude-tmux-name`. Wiring:
+
+- **Claude hooks** (`~/.claude/settings.json`, machine-local and gitignored) run it on
+  `SessionStart`, `UserPromptSubmit` and `Stop`, plus `--clear` on `SessionEnd`.
+- **prefix-N** (`tmux/.tmux.conf`) runs `--all`, sweeping every live session. `/rename`
+  is not a hook event, so this is how a mid-session rename lands immediately instead of
+  at the next prompt.
+
+```
+$ claude-tmux-name          # this session only; needs CLAUDE_PID, i.e. a hook
+$ claude-tmux-name --all    # sweep every live claude session
+$ claude-tmux-name --clear  # drop the window override (SCOPE=window only)
+```
+
+Env knobs: `CLAUDE_TMUX_NAME_SCOPE=session|window` (default `session`; `window` renames
+the window instead and suppresses tmux's `automatic-rename` for it),
+`CLAUDE_TMUX_NAME_PREFIX` to prepend something like `cc:`, and
+`CLAUDE_TMUX_NAME_ONLY_USER=1` to ignore auto-derived names and only follow `/rename`.
+
+Session scope assumes one claude per tmux session. If two ever share one they would
+fight over the name on every hook, so the script detects that, leaves the name alone and
+says which session it skipped.
+
 ## Platform Notes
 
 ### Mail (neomutt + Gmail)
