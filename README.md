@@ -490,19 +490,20 @@ No scraping involved: every live claude writes `~/.claude/sessions/<pid>.json`, 
 already carries `name` (the TUI session name), `nameSource` (`user` if set with
 `/rename`, otherwise `derived`) and `tmux` (`<session>:<window-id>.<pane-id>`). The
 script reads those records, drops any whose pid is no longer running — pane ids get
-recycled, so a stale record would rename an innocent window — and renames the window
-around each pane.
+recycled, so a stale record would rename an innocent window — and configures the
+window around each pane to follow Claude's live title.
 
 Claude sets the *pane* title itself — the session name once you `/rename`, a summary of
 the conversation while the name is still auto-derived — and rewrites it the moment
 either changes. `pane-border-status top` shows that above each pane, and the status bar
 tracks the same string through `@wname` in `tmux/.tmux.conf`, so a `/rename` lands top
-and bottom at once. `#W` alone would lag: nothing renames a window on its own, so it
-holds whatever the last hook set.
+and bottom at once.
 
 The script is what keeps `#W` itself honest, for `prefix-w`, `tmux ls` and anything else
-reading window names. It takes the name from the same pane title where there is one and
-falls back to the json `name`, so every place a session is named agrees.
+reading window names. It enables a per-window automatic rename format that takes the
+live Claude pane title where there is one and falls back to the JSON `name`. Because
+Claude updates the pane title directly, `/rename` updates `#W` without waiting for
+another hook.
 
 On macOS the hook adds the standard Apple Silicon and Intel Homebrew bin directories to
 `PATH` before looking for tmux. The script is compatible with Apple's Bash 3.2, so it
@@ -512,9 +513,8 @@ does not depend on a separately installed Homebrew Bash.
 
 - **Claude hooks** (the stowed `~/.claude/settings.json`) run it on `SessionStart`,
   `UserPromptSubmit` and `Stop`, plus `--clear` on `SessionEnd`.
-- **prefix-N** (`tmux/.tmux.conf`) runs `--all`, sweeping every live session. `/rename`
-  is not a hook event, so this is how a mid-session rename lands immediately instead of
-  at the next prompt.
+- **prefix-N** (`tmux/.tmux.conf`) runs `--all`, sweeping every live session if a hook
+  was missed.
 
 ```
 $ claude-tmux-name          # this session only; needs CLAUDE_PID, i.e. a hook
@@ -522,9 +522,8 @@ $ claude-tmux-name --all    # sweep every live claude session
 $ claude-tmux-name --clear  # drop the window override (SCOPE=window only)
 ```
 
-Env knobs: `CLAUDE_TMUX_NAME_SCOPE=window|session` (default `window`; renaming a window
-explicitly turns tmux's `automatic-rename` off for it, which is what makes the name
-stick), `CLAUDE_TMUX_NAME_PREFIX` to prepend something like `cc:`, and
+Env knobs: `CLAUDE_TMUX_NAME_SCOPE=window|session` (default `window`),
+`CLAUDE_TMUX_NAME_PREFIX` to prepend something like `cc:`, and
 `CLAUDE_TMUX_NAME_ONLY_USER=1` to ignore auto-derived names like `jrw-9c` and only
 follow `/rename`.
 

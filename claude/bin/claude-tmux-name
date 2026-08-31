@@ -14,8 +14,9 @@
 #              claude hook, where CLAUDE_PID is exported.
 #   --all      sweep every live claude session and rename each one's window.
 #              Safe to run from anywhere inside tmux.
-#   --clear    drop this window's rename override, handing it back to tmux's
-#              automatic-rename. Only meaningful under SCOPE=window.
+#   --clear    drop this window's Claude naming format, handing it back to
+#              tmux's default automatic rename. Only meaningful under
+#              SCOPE=window.
 #
 # The window name comes from claude's own pane title where there is one --
 # "✳ settleup" once named, "✳ <summary>" until then -- so #W agrees with what
@@ -71,10 +72,14 @@ records() {
 }
 
 if [ "${1:-}" = --clear ]; then
-  # tmux sessions have no automatic-rename to restore, so this only undoes the
-  # per-window override taken out under SCOPE=window.
-  [ "$scope" = window ] && [ -n "${TMUX_PANE:-}" ] &&
-    tmux set-option -w -t "$TMUX_PANE" -u automatic-rename 2>/dev/null
+  # tmux sessions have no automatic-rename to restore, so this only removes
+  # the per-window options installed under SCOPE=window.
+  if [ "$scope" = window ] && [ -n "${TMUX_PANE:-}" ]; then
+    tmux set-option -wu -t "$TMUX_PANE" automatic-rename 2>/dev/null
+    tmux set-option -wu -t "$TMUX_PANE" automatic-rename-format 2>/dev/null
+    tmux set-option -wu -t "$TMUX_PANE" @claude-tmux-name 2>/dev/null
+    tmux set-option -wu -t "$TMUX_PANE" @claude-tmux-prefix 2>/dev/null
+  fi
   exit 0
 fi
 
@@ -116,9 +121,16 @@ apply() {  # apply <pane-id> <name>
   [ -n "$name" ] || return 0
 
   if [ "$scope" = window ]; then
-    # An explicit rename-window turns automatic-rename off for that window, so
-    # the name sticks instead of reverting to pane_current_command.
-    tmux rename-window -t "$pane" "$name" 2>/dev/null
+    # Claude rewrites pane_title immediately on /rename, which is not a hook
+    # event. Keep automatic rename enabled so #W follows that live title rather
+    # than freezing at the name seen by the most recent hook.
+    tmux set-option -w -t "$pane" @claude-tmux-name "$name" 2>/dev/null
+    tmux set-option -w -t "$pane" @claude-tmux-prefix \
+      "$(sanitize "$prefix")" 2>/dev/null
+    tmux set-option -w -t "$pane" automatic-rename-format \
+      '#{?#{m:✳*,#{pane_title}},#{@claude-tmux-prefix}#{s/^✳ //:pane_title},#{@claude-tmux-name}}' \
+      2>/dev/null
+    tmux set-option -w -t "$pane" automatic-rename on 2>/dev/null
     return 0
   fi
 
