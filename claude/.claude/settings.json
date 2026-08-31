@@ -1,4 +1,25 @@
 {
+  "alwaysThinkingEnabled": false,
+  "editorMode": "vim",
+  "enabledPlugins": {
+    "ruby-lsp@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": false
+  },
+  "extraKnownMarketplaces": {
+    "claude-code-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-code"
+      }
+    }
+  },
+  "permissions": {
+    "allow": [
+      "Bash(colima status:*)"
+    ],
+    "defaultMode": "auto"
+  },
+  "skipDangerousModePermissionPrompt": true,
   "theme": "auto",
   "tui": "fullscreen",
   "hooks": {
