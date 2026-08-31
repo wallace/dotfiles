@@ -4,6 +4,8 @@
 #
 # MCP servers are loaded per-session via --additional-mcp-config (no persistence).
 # Skills are symlinked into the active skills dir for the run, then removed on exit.
+# Inside tmux, the window name follows Copilot's pane title (including /rename)
+# for the duration of the run, then its previous naming behavior is restored.
 #
 # Libraries:
 #   MCP snippets : $COPILOT_HOME/snippets/mcp/<name>.json
@@ -205,6 +207,12 @@ run_cmd() {
   mcps=""
   skills=""
   extra=()
+  tmux_target=""
+  tmux_window_name=""
+  tmux_auto_rename=""
+  tmux_auto_rename_format=""
+  tmux_had_auto_rename=0
+  tmux_had_auto_rename_format=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --mcp)   mcps="$mcps,${2:?--mcp needs a value}"; shift 2 ;;
@@ -230,9 +238,34 @@ run_cmd() {
   # Skills -> temporary symlinks into the active skills dir
   created=()
   cleanup() {
+    local target
+
     for d in ${created[@]+"${created[@]}"}; do
       [ -L "$d" ] && rm -f "$d"
     done
+
+    target="$tmux_target"
+    tmux_target=""
+    [ -n "$target" ] || return 0
+    tmux display-message -p -t "$target" '#{window_id}' >/dev/null 2>&1 || return 0
+
+    if [ "$tmux_auto_rename" = "0" ] && [ -n "$tmux_window_name" ]; then
+      tmux rename-window -t "$target" "$tmux_window_name" 2>/dev/null || true
+    fi
+
+    if [ "$tmux_had_auto_rename_format" -eq 1 ]; then
+      tmux set-option -w -t "$target" automatic-rename-format \
+        "$tmux_auto_rename_format" 2>/dev/null || true
+    else
+      tmux set-option -wu -t "$target" automatic-rename-format 2>/dev/null || true
+    fi
+
+    if [ "$tmux_had_auto_rename" -eq 1 ]; then
+      tmux set-option -w -t "$target" automatic-rename \
+        "$tmux_auto_rename" 2>/dev/null || true
+    else
+      tmux set-option -wu -t "$target" automatic-rename 2>/dev/null || true
+    fi
   }
   trap cleanup EXIT INT TERM
 
@@ -253,7 +286,32 @@ run_cmd() {
     fi
   done
 
-  copilot ${args[@]+"${args[@]}"} ${extra[@]+"${extra[@]}"}
+  # Copilot writes its session name and transient status to the terminal title.
+  # tmux records that as pane_title; use it as #W while Copilot is running so a
+  # /rename updates the window status immediately. Drop Copilot's fixed suffix
+  # from the window name while leaving the pane title itself unchanged.
+  if [ "${COPILOT_TMUX_NAME:-1}" != "0" ] &&
+     [ -n "${TMUX:-}" ] &&
+     [ -n "${TMUX_PANE:-}" ] &&
+     command -v tmux >/dev/null 2>&1; then
+    tmux_target="$TMUX_PANE"
+    tmux_window_name="$(tmux display-message -p -t "$tmux_target" '#{window_name}' 2>/dev/null)" ||
+      tmux_target=""
+    if [ -n "$tmux_target" ]; then
+      tmux_auto_rename="$(tmux display-message -p -t "$tmux_target" '#{automatic-rename}' 2>/dev/null)"
+      tmux_auto_rename_format="$(tmux display-message -p -t "$tmux_target" '#{automatic-rename-format}' 2>/dev/null)"
+      [ -n "$(tmux show-options -w -t "$tmux_target" automatic-rename 2>/dev/null)" ] &&
+        tmux_had_auto_rename=1
+      [ -n "$(tmux show-options -w -t "$tmux_target" automatic-rename-format 2>/dev/null)" ] &&
+        tmux_had_auto_rename_format=1
+
+      tmux set-option -w -t "$tmux_target" automatic-rename-format \
+        '#{s/ - GitHub Copilot$//:pane_title}'
+      tmux set-option -w -t "$tmux_target" automatic-rename on
+    fi
+  fi
+
+  npx --yes @github/copilot@prerelease "${args[@]}" "${extra[@]}"
 }
 
 case "${1:-}" in

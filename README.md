@@ -504,6 +504,10 @@ The script is what keeps `#W` itself honest, for `prefix-w`, `tmux ls` and anyth
 reading window names. It takes the name from the same pane title where there is one and
 falls back to the json `name`, so every place a session is named agrees.
 
+On macOS the hook adds the standard Apple Silicon and Intel Homebrew bin directories to
+`PATH` before looking for tmux. The script is compatible with Apple's Bash 3.2, so it
+does not depend on a separately installed Homebrew Bash.
+
 `stow claude` links `bin/claude-tmux-name` → `~/bin/claude-tmux-name`. Wiring:
 
 - **Claude hooks** (`~/.claude/settings.json`, machine-local and gitignored) run it on

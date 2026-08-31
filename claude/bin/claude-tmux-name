@@ -30,6 +30,13 @@
 #   CLAUDE_TMUX_NAME_ONLY_USER=1            ignore auto-derived names
 set -uo pipefail
 
+# Claude hooks on macOS may receive the system PATH even when tmux was
+# installed by Homebrew.
+if [ "$(uname -s)" = "Darwin" ]; then
+  PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+  export PATH
+fi
+
 [ -n "${TMUX:-}" ] || exit 0
 command -v tmux >/dev/null 2>&1 || exit 0
 command -v jq   >/dev/null 2>&1 || exit 0
@@ -76,23 +83,24 @@ fi
 live_panes="$(tmux list-panes -a -F '#{pane_id}' 2>/dev/null)"
 pane_alive() { printf '%s\n' "$live_panes" | grep -qxF "$1"; }
 
-mapfile -t recs < <(records)
+records_cache="$(records)"
 
 # One claude per tmux session is the assumption that makes session-scope
 # renaming coherent. If two ever share one, they would fight over the name on
 # every hook, so leave that tmux session's name alone and say so.
-declare -A hosts=()
-if [ "$scope" = session ]; then
-  for rec in "${recs[@]}"; do
-    IFS=$'\t' read -r _ pane _ <<<"$rec"
+session_host_count() {
+  local wanted="$1" pane tsid count=0
+  while IFS=$'\t' read -r _ pane _; do
+    [ -n "${pane:-}" ] || continue
     pane_alive "$pane" || continue
     tsid="$(tmux display-message -p -t "$pane" '#{session_id}' 2>/dev/null)" || continue
-    [ -n "$tsid" ] && hosts["$tsid"]=$(( ${hosts["$tsid"]:-0} + 1 ))
-  done
-fi
+    [ "$tsid" = "$wanted" ] && count=$((count + 1))
+  done <<<"$records_cache"
+  printf '%s' "$count"
+}
 
 apply() {  # apply <pane-id> <name>
-  local pane="$1" name tsid title
+  local pane="$1" name tsid title host_count
   pane_alive "$pane" || return 0
 
   if [ "$scope" = window ]; then
@@ -115,10 +123,11 @@ apply() {  # apply <pane-id> <name>
   fi
 
   tsid="$(tmux display-message -p -t "$pane" '#{session_id}' 2>/dev/null)"
-  if [ "${hosts["$tsid"]:-1}" -gt 1 ]; then
+  host_count="$(session_host_count "$tsid")"
+  if [ "$host_count" -gt 1 ]; then
     printf 'claude-tmux-name: %s hosts %d claude sessions; leaving its name alone\n' \
       "$(tmux display-message -p -t "$pane" '#{session_name}' 2>/dev/null)" \
-      "${hosts["$tsid"]}" >&2
+      "$host_count" >&2
     return 0
   fi
   tmux rename-session -t "$pane" "$name" 2>/dev/null
@@ -126,17 +135,17 @@ apply() {  # apply <pane-id> <name>
 
 case "${1:-}" in
   --all)
-    for rec in "${recs[@]}"; do
-      IFS=$'\t' read -r _ pane name <<<"$rec"
+    while IFS=$'\t' read -r _ pane name; do
+      [ -n "${pane:-}" ] || continue
       apply "$pane" "$name"
-    done
+    done <<<"$records_cache"
     ;;
   *)
     [ -n "${CLAUDE_PID:-}" ] || exit 0
-    for rec in "${recs[@]}"; do
-      IFS=$'\t' read -r pid pane name <<<"$rec"
+    while IFS=$'\t' read -r pid pane name; do
+      [ -n "${pid:-}" ] || continue
       [ "$pid" = "$CLAUDE_PID" ] || continue
       apply "${TMUX_PANE:-$pane}" "$name"
-    done
+    done <<<"$records_cache"
     ;;
 esac
