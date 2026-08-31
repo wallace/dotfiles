@@ -207,6 +207,8 @@ export VOICE_PIPELINE_PYTHON="$HOME/.venvs/voice-pipeline/bin/python"
 #   copilot-load run --mcp datadog,splunk              # start with these MCP servers
 #   copilot-load run --skill identify-noisy-neighbor   # start with this skill
 #   copilot-load run --mcp datadog --skill adversarial-review -- -p "..."  # args after --
+# Inside tmux, Copilot's pane/window name follows /rename for the duration of
+# the run. Set COPILOT_TMUX_NAME=0 to keep tmux's normal automatic naming.
 #
 # Add new items interactively (prompts for details):
 #   copilot-load add-mcp        # name, http/local, url or command+args, headers/env
