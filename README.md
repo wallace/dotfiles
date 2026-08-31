@@ -510,8 +510,8 @@ does not depend on a separately installed Homebrew Bash.
 
 `stow claude` links `bin/claude-tmux-name` → `~/bin/claude-tmux-name`. Wiring:
 
-- **Claude hooks** (`~/.claude/settings.json`, machine-local and gitignored) run it on
-  `SessionStart`, `UserPromptSubmit` and `Stop`, plus `--clear` on `SessionEnd`.
+- **Claude hooks** (the stowed `~/.claude/settings.json`) run it on `SessionStart`,
+  `UserPromptSubmit` and `Stop`, plus `--clear` on `SessionEnd`.
 - **prefix-N** (`tmux/.tmux.conf`) runs `--all`, sweeping every live session. `/rename`
   is not a hook event, so this is how a mid-session rename lands immediately instead of
   at the next prompt.
