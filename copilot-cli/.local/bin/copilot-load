@@ -208,11 +208,10 @@ run_cmd() {
   skills=""
   extra=()
   tmux_target=""
+  tmux_watcher_pid=""
   tmux_window_name=""
   tmux_auto_rename=""
-  tmux_auto_rename_format=""
   tmux_had_auto_rename=0
-  tmux_had_auto_rename_format=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --mcp)   mcps="$mcps,${2:?--mcp needs a value}"; shift 2 ;;
@@ -223,6 +222,23 @@ run_cmd() {
   done
 
   args=()
+
+  watch_tmux_title() {
+    local target="$1" title name last_name=""
+
+    while title="$(tmux display-message -p -t "$target" '#{pane_title}' 2>/dev/null)"; do
+      case "$title" in
+        *' - GitHub Copilot') name="${title% - GitHub Copilot}" ;;
+        *) sleep 0.1; continue ;;
+      esac
+
+      if [ -n "$name" ] && [ "$name" != "$last_name" ]; then
+        tmux rename-window -t "$target" "$name" 2>/dev/null || return 0
+        last_name="$name"
+      fi
+      sleep 0.1
+    done
+  }
 
   # MCP servers -> --additional-mcp-config flags
   IFS=',' read -ra mcp_arr <<< "$mcps"
@@ -238,11 +254,18 @@ run_cmd() {
   # Skills -> temporary symlinks into the active skills dir
   created=()
   cleanup() {
-    local target
+    local target watcher_pid
 
     for d in ${created[@]+"${created[@]}"}; do
       [ -L "$d" ] && rm -f "$d"
     done
+
+    watcher_pid="$tmux_watcher_pid"
+    tmux_watcher_pid=""
+    if [ -n "$watcher_pid" ]; then
+      kill "$watcher_pid" 2>/dev/null || true
+      wait "$watcher_pid" 2>/dev/null || true
+    fi
 
     target="$tmux_target"
     tmux_target=""
@@ -251,13 +274,6 @@ run_cmd() {
 
     if [ "$tmux_auto_rename" = "0" ] && [ -n "$tmux_window_name" ]; then
       tmux rename-window -t "$target" "$tmux_window_name" 2>/dev/null || true
-    fi
-
-    if [ "$tmux_had_auto_rename_format" -eq 1 ]; then
-      tmux set-option -w -t "$target" automatic-rename-format \
-        "$tmux_auto_rename_format" 2>/dev/null || true
-    else
-      tmux set-option -wu -t "$target" automatic-rename-format 2>/dev/null || true
     fi
 
     if [ "$tmux_had_auto_rename" -eq 1 ]; then
@@ -287,9 +303,9 @@ run_cmd() {
   done
 
   # Copilot writes its session name and transient status to the terminal title.
-  # tmux records that as pane_title; use it as #W while Copilot is running so a
-  # /rename updates the window status immediately. Drop Copilot's fixed suffix
-  # from the window name while leaving the pane title itself unchanged.
+  # tmux records that as pane_title, but automatic-rename does not run when an
+  # application changes only that title. Watch the pane title so /rename updates
+  # the window immediately, dropping Copilot's fixed suffix from the name.
   if [ "${COPILOT_TMUX_NAME:-1}" != "0" ] &&
      [ -n "${TMUX:-}" ] &&
      [ -n "${TMUX_PANE:-}" ] &&
@@ -299,15 +315,12 @@ run_cmd() {
       tmux_target=""
     if [ -n "$tmux_target" ]; then
       tmux_auto_rename="$(tmux display-message -p -t "$tmux_target" '#{automatic-rename}' 2>/dev/null)"
-      tmux_auto_rename_format="$(tmux display-message -p -t "$tmux_target" '#{automatic-rename-format}' 2>/dev/null)"
       [ -n "$(tmux show-options -w -t "$tmux_target" automatic-rename 2>/dev/null)" ] &&
         tmux_had_auto_rename=1
-      [ -n "$(tmux show-options -w -t "$tmux_target" automatic-rename-format 2>/dev/null)" ] &&
-        tmux_had_auto_rename_format=1
 
-      tmux set-option -w -t "$tmux_target" automatic-rename-format \
-        '#{s/ - GitHub Copilot$//:pane_title}'
-      tmux set-option -w -t "$tmux_target" automatic-rename on
+      tmux set-option -w -t "$tmux_target" automatic-rename off
+      watch_tmux_title "$tmux_target" &
+      tmux_watcher_pid=$!
     fi
   fi
 
