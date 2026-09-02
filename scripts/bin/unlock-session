@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+#
+# unlock-session
+#
+# Open the GNOME lock screen from a shell, so an RDP client lands on the
+# desktop instead of a password prompt it cannot get past.
+#
+# The *user* unit of gnome-remote-desktop shares the session you are logged
+# into rather than starting its own, which is what makes the browser you
+# already have open the browser you see from the client. The cost is that the
+# console lock travels with it: when the screen locks on idle, every RDP
+# connection is handed the lock screen.
+#
+# `loginctl unlock-session` is the supported way through. It asks logind to
+# tell the compositor to dismiss the lock -- the same path the Settings switch
+# takes. It is not a bypass, and it is not a substitute for the password when
+# someone is standing at the machine.
+#
+# What this deliberately does NOT do is turn the screen lock off. That is the
+# other cure for the same annoyance:
+#
+#   gsettings set org.gnome.desktop.screensaver lock-enabled false
+#
+# and it leaves the physical screen open indefinitely. Unlocking on demand
+# keeps the lock doing its job the rest of the time, which matters on a
+# machine that is not always in a room you control.
+#
+# Session IDs are handed out per login and are not stable -- the graphical
+# session is 1 today and 4 after the next reboot -- so sessions are found by
+# type rather than hardcoded.
+#
+# Usage:
+#   unlock-session           unlock the graphical session
+#   unlock-session --all     unlock every locked session owned by this user
+#   unlock-session --list    show sessions and lock state, change nothing
+#
+# If RDP still shows a lock screen after this succeeds, it is sharing a
+# different session than the one that got unlocked. The user unit shares your
+# login session; the system unit is Remote Login and starts its own, which
+# this cannot reach:
+#
+#   systemctl --user status gnome-remote-desktop   # session sharing
+#   systemctl status gnome-remote-desktop          # Remote Login (headless)
+
+set -euo pipefail
+
+# Wayland first since that is the default on current Ubuntu, but an X11
+# session locks the same way and logind reports it the same way.
+readonly GRAPHICAL_TYPES="wayland x11 mir"
+readonly UNLOCK_TIMEOUT=5   # seconds to wait for the compositor to catch up
+
+sessions() {
+  loginctl list-sessions --no-legend 2>/dev/null | awk '{print $1}'
+}
+
+prop() {
+  loginctl show-session "$1" -p "$2" --value 2>/dev/null || true
+}
+
+is_graphical() {
+  local type
+  type="$(prop "$1" Type)"
+  case " $GRAPHICAL_TYPES " in
+    *" $type "*) return 0 ;;
+    *)           return 1 ;;
+  esac
+}
+
+list_sessions() {
+  printf '%-9s %-12s %-8s %s\n' SESSION TYPE LOCKED STATE
+  local s
+  for s in $(sessions); do
+    printf '%-9s %-12s %-8s %s\n' \
+      "$s" "$(prop "$s" Type)" "$(prop "$s" LockedHint)" "$(prop "$s" State)"
+  done
+}
+
+# logind hands the request to the compositor and returns straight away, so
+# reading LockedHint on the next line still reports the old value. Poll rather
+# than guess at a sleep long enough to cover it.
+unlock_one() {
+  local session="$1" type waited
+  type="$(prop "$session" Type)"
+
+  if [ "$(prop "$session" LockedHint)" != "yes" ]; then
+    echo "session $session ($type) already unlocked"
+    return 0
+  fi
+
+  loginctl unlock-session "$session" || {
+    echo "session $session: logind refused the unlock request" >&2
+    return 1
+  }
+
+  waited=0
+  while [ "$waited" -lt "$((UNLOCK_TIMEOUT * 2))" ]; do
+    if [ "$(prop "$session" LockedHint)" != "yes" ]; then
+      echo "session $session ($type) unlocked"
+      return 0
+    fi
+    sleep 0.5
+    waited=$((waited + 1))
+  done
+
+  # The request went through but the compositor never dropped the hint. Most
+  # often gnome-shell is wedged; a stale hint after a crash looks identical.
+  echo "session $session: still locked ${UNLOCK_TIMEOUT}s after the request" >&2
+  return 1
+}
+
+main() {
+  command -v loginctl >/dev/null 2>&1 || {
+    echo "loginctl not found -- this needs systemd-logind." >&2
+    exit 1
+  }
+
+  local mode="graphical"
+  case "${1:-}" in
+    --all)        mode="all" ;;
+    --list|-l)    list_sessions; exit 0 ;;
+    -h|--help)    sed -n '3,45p' "$0" | sed 's/^#\{0,1\} \{0,1\}//'; exit 0 ;;
+    '')           : ;;
+    *)
+      echo "unknown option: $1" >&2
+      echo "usage: $(basename "$0") [--all|--list]" >&2
+      exit 2 ;;
+  esac
+
+  local s targets=""
+  for s in $(sessions); do
+    if [ "$mode" = "all" ]; then
+      [ "$(prop "$s" LockedHint)" = "yes" ] && targets="$targets $s"
+    else
+      is_graphical "$s" && targets="$targets $s"
+    fi
+  done
+
+  if [ -z "$targets" ]; then
+    if [ "$mode" = "all" ]; then
+      echo "nothing locked."
+    else
+      echo "no graphical session found. --list shows what logind sees;" >&2
+      echo "--all unlocks by lock state instead of by type." >&2
+      exit 1
+    fi
+    exit 0
+  fi
+
+  local rc=0
+  for s in $targets; do
+    unlock_one "$s" || rc=1
+  done
+  exit "$rc"
+}
+
+main "$@"
