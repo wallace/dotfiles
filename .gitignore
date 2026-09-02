@@ -151,8 +151,11 @@ copilot-cli/.local/bin/claude
 # neomutt errors on startup if they do not exist.
 mutt/.mutt/cache/bodies/*
 !mutt/.mutt/cache/bodies/empty-file-for-git
+mutt/.mutt/cache/headers/
 mutt/.mutt/temp/*
 !mutt/.mutt/temp/empty-file-for-git
+# Written by `mutt_mailcap`/system mailcap probing at runtime, never by hand.
+mutt/.mutt/mailcap
 
 # Claude Code config. A global ignore rule (`.claude/` in ~/.config/git/ignore)
 # exists to keep Claude's state out of every OTHER repo, but it also matches
