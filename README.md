@@ -147,6 +147,25 @@ $ stow -n -v -t ~ zsh
 
 Back up whatever it names, remove it, and re-run.
 
+`stow git` deliberately does **not** create `~/.gitconfig`, so write it by hand:
+
+```
+$ printf '[include]\n\tpath = ~/dotfiles/git/.gitconfig\n' > ~/.gitconfig
+```
+
+Skip this and none of the git configuration applies — the per-OS
+`.gitconfig-{linux,macos,windows}` files are pulled in *by* `git/.gitconfig`,
+and nothing loads it without that shim.
+
+The indirection exists because `git config --global` writes to `~/.gitconfig`
+whenever it exists, and tools use it without asking: `gh auth setup-git`, and
+the "Authenticate Git with your GitHub credentials?" step of `gh auth login`,
+both install a credential helper that way. When `~/.gitconfig` was a stow
+symlink into this repo, those writes landed in the working tree — showing up as
+an unexplained dirty `git/.gitconfig` after an unrelated `git push`, with a
+duplicate credential block that shadowed the per-OS one. A real, untracked
+`~/.gitconfig` absorbs them instead. See `git/.stow-local-ignore`.
+
 ###### 7. vim
 
 ```
@@ -169,6 +188,12 @@ Log out and back in for this to take effect.
 $ gh auth login
 $ dropbox start -i     # fetches the proprietary daemon, then sign in
 ```
+
+Answering yes to `gh auth login`'s "Authenticate Git with your GitHub
+credentials?" is harmless — it writes into the untracked `~/.gitconfig` shim,
+not this repo — but it is also unnecessary: the per-OS
+`.gitconfig-{linux,macos,windows}` files already set the `gh` credential helper
+with the right path for each platform.
 
 **Commits will fail until you enable the 1Password SSH agent.** The `git`
 package sets `commit.gpgsign=true` with `gpg.format=ssh` and
@@ -364,7 +389,7 @@ $ rm ~/.zshrc
 ```
 $ stow zsh
 $ stow bash
-$ stow git
+$ stow git   # note: does not create ~/.gitconfig
 $ stow ssh
 $ stow vim
 $ stow nvim
@@ -384,6 +409,17 @@ $ stow obsidian
 $ stow kitty
 $ stow lein
 ```
+
+`stow git` does not create `~/.gitconfig` — write the shim that loads the
+tracked config, or none of the git settings apply:
+
+```
+$ printf '[include]\n\tpath = ~/dotfiles/git/.gitconfig\n' > ~/.gitconfig
+```
+
+It is a real file rather than a symlink on purpose, so that `git config
+--global` writes from tools like `gh auth setup-git` land there instead of in
+this repo. The [Linux walkthrough](#6-stow-the-dotfiles) has the full reasoning.
 
 The `ssh` package carries the client config, and splits per-OS the same way
 `git` does — `~/.ssh/config-linux` for phoenix, `~/.ssh/config-macos` for the

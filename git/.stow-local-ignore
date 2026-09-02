@@ -1,0 +1,27 @@
+# A custom .stow-local-ignore REPLACES stow's built-in default ignore list, so we
+# must re-list the defaults we still want alongside our own additions — otherwise
+# stow would start symlinking README.md into $HOME. Same reasoning as the
+# chime and voice-pipeline packages.
+
+# --- our additions ---
+# .gitconfig is deliberately NOT stowed. `git config --global` writes to
+# ~/.gitconfig whenever that file exists, and `gh auth setup-git` (also the
+# "Authenticate Git with your GitHub credentials?" step of `gh auth login`) uses
+# exactly that to install its credential helper. With ~/.gitconfig symlinked
+# into this repo, those writes land in the working tree and show up as an
+# unexplained dirty file after an unrelated push.
+#
+# Instead, install.sh writes a small per-machine ~/.gitconfig that [include]s
+# this file. Tool writes land in that untracked shim; the tracked config is
+# never touched. The per-OS .gitconfig-{linux,macos,windows} files below are
+# still stowed normally — only the shared entry point is special.
+^/\.gitconfig$
+
+# --- stow's usual defaults, restated ---
+^/README.*
+^/LICENSE.*
+^/COPYING
+\.gitignore$
+\.git$
+\.gitmodules$
+\.DS_Store$
