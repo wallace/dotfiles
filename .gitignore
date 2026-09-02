@@ -153,3 +153,21 @@ mutt/.mutt/cache/bodies/*
 !mutt/.mutt/cache/bodies/empty-file-for-git
 mutt/.mutt/temp/*
 !mutt/.mutt/temp/empty-file-for-git
+
+# Claude Code config. A global ignore rule (`.claude/` in ~/.config/git/ignore)
+# exists to keep Claude's state out of every OTHER repo, but it also matches
+# this stow package, so `git add claude/.claude/settings.json` is refused even
+# though the file is already tracked. Repo .gitignore outranks the global one,
+# so re-include the directory here.
+#
+# Same shape as the ssh/.ssh/ exception above, and for the same reason: git
+# cannot re-include a file whose parent directory is excluded, so un-ignore the
+# directory, immediately re-exclude everything in it, then allow back only what
+# is really configuration. ~/.claude is a stow symlink into this repo, so
+# Claude's entire runtime state -- session transcripts under projects/,
+# history.jsonl, caches, and .credentials.json -- lives inside the working
+# tree. The re-exclusion is what keeps those out, credentials included.
+!claude/.claude/
+claude/.claude/*
+!claude/.claude/settings.json
+!claude/.claude/skills/
