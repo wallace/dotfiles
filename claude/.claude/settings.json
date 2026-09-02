@@ -20,6 +20,7 @@
     "defaultMode": "auto"
   },
   "skipDangerousModePermissionPrompt": true,
+  "skipWorkflowUsageWarning": true,
   "theme": "auto",
   "tui": "fullscreen",
   "hooks": {
