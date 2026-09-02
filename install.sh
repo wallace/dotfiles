@@ -3,6 +3,10 @@
 
 # Configuration
 GIT_EMAIL="${CODESPACE_GIT_EMAIL:-jonathan.wallace@gmail.com}"
+# Where this repo actually lives. Codespaces clones it somewhere under
+# /workspaces rather than ~/dotfiles, so resolve it from the script instead of
+# hardcoding a path.
+DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # let's have our own log
 exec > >(tee -i $HOME/dotfiles_install.log)
@@ -74,6 +78,15 @@ if [ "$CODESPACES" == "true" ]; then
   do
     stow -q -t $HOME $i
   done
+
+  # ~/.gitconfig is deliberately not stowed -- see git/.stow-local-ignore for
+  # why. Nothing else creates it, so write the per-machine shim that pulls in
+  # the tracked config. Without this the git package has no entry point and
+  # none of its settings apply.
+  if [ ! -e "$HOME/.gitconfig" ]; then
+    fancy_echo "Writing ~/.gitconfig shim"
+    printf '[include]\n\tpath = %s/git/.gitconfig\n' "$DOTFILES_DIR" > "$HOME/.gitconfig"
+  fi
 
   fancy_echo "Installing vim plugins"
   if [ -e "$HOME"/.vim/autoload/plug.vim ]; then
