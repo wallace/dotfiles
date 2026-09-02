@@ -490,6 +490,24 @@ $ mkdir ~/.gitshots # add for git picture capture on git actions
 
 ## Tools
 
+### Global gitignore
+
+`stow git` links `git/.config/git/ignore` → `~/.config/git/ignore`, which git reads by
+default under XDG — no `core.excludesFile` setting required. It covers things that are a
+property of *the machine and its tooling* rather than any one project: editor droppings
+(`*~`, `*.swp`, `tags`, `Session.vim`), OS metadata (`.DS_Store`, `Thumbs.db`), local-only
+helpers (`.envrc`, `.direnv/`, `.tool-versions`, REPL histories), and AI-assistant state
+(`.claude/`).
+
+Project-specific patterns deliberately stay **out** of it — those belong in the project's
+own `.gitignore`, where collaborators get them too. A global rule that hides a file only
+on your machine is a good way to forget to commit something everyone else needs.
+
+Note the interaction with this repo: the stow packages live inside the working tree, so a
+global rule like `.claude/` also matches `claude/.claude/`. Repo `.gitignore` outranks the
+global file, so those exceptions are re-included in `.gitignore` at the root — see the
+`claude/` and `ssh/` blocks there.
+
 ### voice-pipeline
 
 Enriches MacWhisper voice-memo transcripts (dropped into my Obsidian inbox) with speaker

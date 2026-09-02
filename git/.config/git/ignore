@@ -1,26 +1,50 @@
-*.swo
-*.swp
+# Global gitignore, stowed to ~/.config/git/ignore by the `git` package.
+#
+# Git reads this path by default (XDG), so no core.excludesFile setting is
+# needed. Keep it to things that are a property of *this machine and these
+# tools* -- editor droppings, OS metadata, local-only helper files. Anything
+# specific to a project belongs in that project's own .gitignore, where
+# collaborators get it too.
+
+# --- editors ---
 *~
+*.swp
+*.swo
+.idea/
+.vscode/
+Session.vim
+tags
+TAGS
+.netrwhist
+
+# --- OS metadata ---
 .DS_Store
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+Desktop.ini
+
+# --- local-only tooling ---
+.envrc
+.direnv/
+.tool-versions
+.node-version
+.ruby-version
+.python-version
+.rvmrc
 .autotest
 .byebug_history
-.envrc
-.projects
-.rvmrc
-.node-version
-Session.vim
-db/*.sqlite3
-log/*.log
-meta-docs/
-mutt/.mutt/cache/headers/
-mutt/.mutt/mailcap
-production_structure.sql
-rerun.txt
-ruby-debug.rb
-screenrc
-tags
-tmp/
-vendor/plugins/acts_as_appointable/test/acts_as_appointable_plugin.sqlite3.db
-_site/
-spec/examples.txt
+.irb_history
+.node_repl_history
+.psql_history
+.python_history
+
+# --- AI assistants (local config/state, not shared project setup) ---
 .claude/
+.aider*
+.cursorignore
+
+# --- scratch ---
+.projects
+meta-docs/
