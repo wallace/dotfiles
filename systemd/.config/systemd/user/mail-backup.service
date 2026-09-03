@@ -1,0 +1,36 @@
+# Snapshot ~/.mail into the restic repository on /mnt/bulk.
+#
+# This became schedulable only once the repo moved off the T9. While it lived
+# on a removable drive the unit would have failed most of the time through no
+# fault of its own -- mail-backup exits 69 when the drive is absent -- and a
+# timer that mostly fails trains you to ignore it. /mnt/bulk is internal, so a
+# failure here now means something is actually wrong.
+[Unit]
+Description=Snapshot the local Maildir into restic on /mnt/bulk
+Documentation=man:restic(1)
+# Don't start a backup while the volume is missing: RequiresMountsFor makes
+# systemd order this after the mount and fail fast if it never appears, rather
+# than letting restic create a fresh empty repo inside the bare mountpoint.
+RequiresMountsFor=/mnt/bulk
+
+[Service]
+Type=oneshot
+# Same reasoning as mailsync@.service: the user manager's PATH has neither
+# Homebrew nor ~/bin, so mail-backup, restic and secret-tool are all invisible
+# without this.
+Environment=PATH=%h/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin
+# .zshrc is never sourced here, so the repo path that the interactive shell
+# exports has to be repeated. Keep this in step with zsh/.zshrc.
+Environment=MAIL_BACKUP_REPO=/mnt/bulk/mail-restic
+ExecStart=%h/bin/mail-backup
+
+# mail-backup takes mailsync's flock so a snapshot never races a sync, and
+# gives up with 75/EX_TEMPFAIL after 15 minutes of waiting. That is a
+# scheduling collision, not a fault -- the next run will get the lock -- so it
+# should not be recorded as a failed unit.
+SuccessExitStatus=75
+
+# restic is IO-heavy and nothing here is urgent; stay out of the way of
+# anything interactive.
+Nice=10
+IOSchedulingClass=idle

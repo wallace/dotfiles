@@ -1,0 +1,21 @@
+# Daily rather than hourly: mail-backup runs `forget --prune` and a read-data
+# check on every invocation, which is far too much work to repeat each hour for
+# a Maildir that changes by a few hundred messages a day. The retention ladder
+# in the script keeps 14 dailies, so daily is also the cadence that ladder
+# assumes.
+[Unit]
+Description=Daily restic snapshot of the local Maildir
+
+[Timer]
+# Overnight, when the machine is idle and a prune plus integrity check will not
+# compete with anything. A calendar spec rather than OnUnitActiveSec, for the
+# same reason mailsync@gmail-inbox.timer uses one: a oneshot enabled long after
+# boot computes no next elapse from OnUnitActiveSec and fires exactly once.
+OnCalendar=*-*-* 03:30:00
+# Worth catching up on. Skipping a day's snapshot because the machine was off
+# overnight is exactly the gap this is meant to close.
+Persistent=true
+RandomizedDelaySec=20min
+
+[Install]
+WantedBy=timers.target
