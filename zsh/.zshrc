@@ -40,11 +40,13 @@ fi
 
 # Linux-only paths -- the mirror image of the block above.
 if (( IS_LINUX )); then
-    # restic repository for mail-backup, on the T9 external drive. udisks
-    # mounts removable media under /run/media, which is a Linux-only
-    # convention. mail-backup exits cleanly when the drive is not plugged in,
-    # so this is safe to export whenever we are on Linux.
-    export MAIL_BACKUP_REPO="/run/media/$USER/T9/mail-restic"
+    # restic repository for mail-backup, on the internal bulk volume. This
+    # used to live on the T9 under /run/media, but a removable drive made the
+    # backup dependent on someone remembering to plug it in -- and NTFS meant
+    # every unclean unplug left the volume dirty and unmountable until it was
+    # fixed by hand. /mnt/bulk is internal ext4, always present, so the backup
+    # can be scheduled rather than run by hand.
+    export MAIL_BACKUP_REPO="/mnt/bulk/mail-restic"
 fi
 
 # Check if system is Linux/Ubuntu (only init brew if installed)

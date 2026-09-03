@@ -28,7 +28,7 @@
 set -euo pipefail
 
 src="${TAKEOUT_SRC:-$HOME/Downloads}"
-dst="${TAKEOUT_DEST:-/run/media/$USER/T9/takeout}"
+dst="${TAKEOUT_DEST:-/mnt/bulk/takeout}"
 interval="${TAKEOUT_INTERVAL:-20}"
 once=false
 [ "${1:-}" = "--once" ] && once=true

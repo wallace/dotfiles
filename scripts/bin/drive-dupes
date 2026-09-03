@@ -27,7 +27,7 @@ import sys
 
 REMOTE = os.environ.get("DRIVE_BACKUP_REMOTE", "gdrive:")
 DEST = os.environ.get(
-    "DRIVE_BACKUP_DEST", f"/run/media/{os.environ.get('USER','')}/T9/gdrive"
+    "DRIVE_BACKUP_DEST", "/mnt/bulk/gdrive"
 )
 EXPORT_FORMATS = "docx,xlsx,pptx,svg,pdf"
 
