@@ -17,7 +17,7 @@
 #
 # Configuration:
 #   DRIVE_BACKUP_REMOTE  rclone remote name (default: gdrive:)
-#   DRIVE_BACKUP_DEST    staging directory (default: T9/gdrive)
+#   DRIVE_BACKUP_DEST    staging directory (default: /mnt/bulk/gdrive)
 #   MAIL_BACKUP_REPO     restic repository -- shared with mail-backup
 #
 # Set the remote up once with `rclone config` -- it needs a browser for OAuth.
@@ -25,7 +25,7 @@
 set -euo pipefail
 
 remote="${DRIVE_BACKUP_REMOTE:-gdrive:}"
-dest="${DRIVE_BACKUP_DEST:-/run/media/$USER/T9/gdrive}"
+dest="${DRIVE_BACKUP_DEST:-/mnt/bulk/gdrive}"
 parent=$(dirname "$dest")
 
 if [ ! -d "$parent" ]; then
