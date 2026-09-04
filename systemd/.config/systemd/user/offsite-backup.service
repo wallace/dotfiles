@@ -1,0 +1,31 @@
+# Replicate both local restic repositories to Backblaze B2.
+#
+# Ordered after the local backups rather than scheduled independently: copying
+# before they have run would ship yesterday's snapshots and then sit idle until
+# next week. Wants= rather than Requires= so a failed local backup still lets
+# whatever else exists go offsite.
+[Unit]
+Description=Replicate local restic repositories to Backblaze B2
+Documentation=man:restic(1)
+Wants=network-online.target
+After=network-online.target mail-backup.service bulk-backup.service
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin
+Environment=OFFSITE_REPO=b2:jrw-restic-offsite:restic
+ExecStart=%h/bin/offsite-backup
+
+# 69/EX_UNAVAILABLE means B2 was unreachable or the credentials were rejected
+# before anything was uploaded -- a laptop on a plane, not a broken backup.
+# Treating it as success keeps the unit green for the expected case; a red one
+# then means a copy actually failed partway.
+SuccessExitStatus=69
+
+# Uploading 37 GB should never compete with interactive work.
+Nice=15
+IOSchedulingClass=idle
+
+# A cold seed runs hours; a weekly delta runs minutes. Cap it well past the
+# former so a wedged transfer cannot run until the next firing.
+TimeoutStartSec=6h

@@ -1,0 +1,14 @@
+# Weekly, an hour after bulk-backup, so both local repositories have finished
+# writing before anything is copied off them.
+[Unit]
+Description=Weekly replication of local restic repositories to B2
+
+[Timer]
+OnCalendar=Sun 06:00
+# The machine is not always on at 06:00 Sunday, and a missed week is a real gap
+# in the only copy that survives the building.
+Persistent=true
+RandomizedDelaySec=45min
+
+[Install]
+WantedBy=timers.target
