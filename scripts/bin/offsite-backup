@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+#
+# offsite-backup
+#
+# Replicate both local restic repositories to Backblaze B2. This is the third
+# leg of 3-2-1: /mnt/bulk holds the working copy and the mail repository, the
+# T9 holds a copy on separate hardware in the same room, and this holds a copy
+# that survives the room.
+#
+# `restic copy` rather than a second `backup` from source, for three reasons.
+# It preserves snapshot IDs and history, so the offsite repository is a drop-in
+# replacement in a disaster rather than a parallel universe with its own
+# timeline. It never re-reads the source trees -- 27 GB of photos stay on disk
+# while only new packs move. And it inherits the local retention decisions
+# instead of needing its own forget policy to be kept in step.
+#
+# The offsite repository MUST have been created with --copy-chunker-params from
+# one of the sources. Without matching chunker parameters restic re-chunks every
+# blob on copy, which deduplicates against nothing and uploads the world.
+#
+# Configuration:
+#   OFFSITE_REPO   restic repository (default: b2:jrw-restic-offsite:restic)
+#
+# Three secrets in the login keyring:
+#
+#   secret-tool store --label='B2 restic (keyID)' \
+#       service b2 repo offsite field account
+#   secret-tool store --label='B2 restic (applicationKey)' \
+#       service b2 repo offsite field key
+#   secret-tool store --label='restic (offsite backup)' service restic repo offsite
+#
+# Keep the repository password in 1Password. If this machine is gone, that
+# password is the only thing between you and unrecoverable ciphertext -- the
+# keyring holding it went up with the machine.
+
+set -euo pipefail
+
+repo="${OFFSITE_REPO:-b2:jrw-restic-offsite:restic}"
+
+B2_ACCOUNT_ID=$(secret-tool lookup service b2 repo offsite field account) || {
+    echo "offsite-backup: B2 keyID not in keyring" >&2; exit 69; }
+B2_ACCOUNT_KEY=$(secret-tool lookup service b2 repo offsite field key) || {
+    echo "offsite-backup: B2 applicationKey not in keyring" >&2; exit 69; }
+export B2_ACCOUNT_ID B2_ACCOUNT_KEY
+
+export RESTIC_REPOSITORY="$repo"
+export RESTIC_PASSWORD_COMMAND="secret-tool lookup service restic repo offsite"
+
+# Bail before uploading anything if the network or credentials are not there,
+# so a failure reads as "could not reach B2" rather than a half-finished copy.
+if ! restic cat config >/dev/null 2>&1; then
+    echo "offsite-backup: cannot open $repo -- network down, or credentials rejected" >&2
+    exit 69
+fi
+
+rc=0
+for pair in "bulk:/mnt/t9/bulk-restic" "mail:/mnt/bulk/mail-restic"; do
+    name=${pair%%:*}; path=${pair#*:}
+    # The T9 is removable, so its repository is often simply absent. That is
+    # not a failure worth alerting on -- the next run with the drive attached
+    # catches up, and the mail repository still copies meanwhile.
+    if [ ! -d "$path" ]; then
+        echo "offsite-backup: $path not present, skipping $name" >&2
+        continue
+    fi
+    echo "== copying $name"
+    RESTIC_FROM_REPOSITORY="$path" \
+    RESTIC_FROM_PASSWORD_COMMAND="secret-tool lookup service restic repo $name" \
+        restic copy || rc=$?
+done
+
+# No forget/prune here on purpose. Retention is decided by mail-backup and
+# bulk-backup against the local repositories; copy brings across whatever
+# survived those policies. Pruning independently here would either fight those
+# decisions or silently diverge from them.
+#
+# Structure only, no --read-data: verifying data would re-download the whole
+# repository from B2 every run. Egress is free up to 3x stored, but this would
+# blow past that quickly for no benefit restic's own checksums do not already
+# provide on restore.
+restic check
+
+exit "$rc"
