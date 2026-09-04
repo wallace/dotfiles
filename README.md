@@ -775,25 +775,27 @@ section-starting or global keyword".
 
 ### Backups (restic)
 
-Two restic repositories on two physical disks, each with its own password in
-the login keyring:
+Three restic repositories, each with its own password in the login keyring:
 
 ```
-~/.mail ─────────────────► /mnt/bulk/mail-restic   nightly    (mail-backup)
-/mnt/bulk/{photos,gdrive} ► /mnt/t9/bulk-restic    weekly     (bulk-backup)
+~/.mail ─────────────────► /mnt/bulk/mail-restic   nightly  (mail-backup)
+/mnt/bulk/{photos,gdrive} ► /mnt/t9/bulk-restic    weekly   (bulk-backup)
+
+  both of the above ──────► b2:jrw-restic-offsite  weekly   (offsite-backup)
 ```
+
+That is 3-2-1: three copies, two kinds of media, one off the premises.
 
 Why restic rather than tarballs: snapshots are deduplicated and incremental, so
 only changed data moves after the first run, and `restic check` can prove the
 repository is still readable. A backup nobody has verified is not a backup.
 
-Why two repositories on two disks: `mail-restic` lives on `/mnt/bulk` and is
-therefore a second copy on the same disk as everything else there. That
-survives an accidental delete or a corrupted file; it does not survive the
-disk. The T9 exists to be separate hardware.
-
-**Neither is offsite.** Both copies are in the same machine, so fire, theft and
-a mistaken `sudo` are all still uncovered.
+Why the repositories are split the way they are: `mail-restic` lives on
+`/mnt/bulk` and is therefore a second copy on the same disk as everything else
+there. That survives an accidental delete or a corrupted file; it does not
+survive the disk. The T9 is separate hardware in the same room, which covers a
+dead disk and covers nothing about fire, theft, or a mistaken `sudo`. B2 is the
+copy that survives the room.
 
 #### Setup, once per machine
 
@@ -804,7 +806,21 @@ repository unrecoverable regardless of what the keyring holds:
 ```
 $ secret-tool store --label='restic (mail backup)' service restic repo mail
 $ secret-tool store --label='restic (bulk backup)' service restic repo bulk
+$ secret-tool store --label='restic (offsite backup)' service restic repo offsite
 ```
+
+B2 additionally needs its application key, stored as two more entries:
+
+```
+$ secret-tool store --label='B2 restic (keyID)' \
+      service b2 repo offsite field account
+$ secret-tool store --label='B2 restic (applicationKey)' \
+      service b2 repo offsite field key
+```
+
+Note `secret-tool search` is unreliable here — it reports nothing even for
+entries that demonstrably exist. `secret-tool lookup` is the authoritative
+check.
 
 `/mnt/bulk` is the internal 11 TB volume. The T9 is a removable 4 TB SSD, ext4,
 mounted at `/mnt/t9` from `/etc/fstab` with `nofail` so an absent drive does not
@@ -822,13 +838,14 @@ Then enable the timers:
 ```
 $ stow -t ~ systemd scripts
 $ systemctl --user daemon-reload
-$ systemctl --user enable --now mail-backup.timer bulk-backup.timer
+$ systemctl --user enable --now mail-backup.timer bulk-backup.timer offsite-backup.timer
 ```
 
 | Timer | Runs | Covers |
 | --- | --- | --- |
 | `mail-backup.timer` | daily 03:30 | `~/.mail`, including the notmuch database and its `gmail/` tags |
 | `bulk-backup.timer` | Sun 04:30 | `/mnt/bulk/photos` and `/mnt/bulk/gdrive` |
+| `offsite-backup.timer` | Sun 06:00 | both local repositories, copied to B2 |
 
 Daily and weekly rather than hourly because every run does `forget --prune` and
 a read-data check on top of the snapshot — far too much work to repeat hourly
@@ -853,6 +870,16 @@ keeps 14 dailies.
   for that. Mapping it to success keeps the unit green for the expected case,
   so a red one means something actually broke. Check `journalctl --user -u
   bulk-backup` to see which runs did real work.
+- **`SuccessExitStatus=69`** on `offsite-backup` too, for the same reason: B2
+  unreachable or credentials rejected, caught by a `restic cat config` probe
+  before any upload begins, is a laptop on a plane rather than a broken backup.
+  A red unit then means a copy genuinely failed partway.
+- **Ordering.** `offsite-backup` lists `After=mail-backup.service
+  bulk-backup.service` and is scheduled an hour behind them, so it copies
+  snapshots that have finished being written rather than last week's. `After=`
+  only orders units that are *already* being started — it does not pull them
+  in, so a local backup that failed or never ran does not block the copy of
+  whatever else exists.
 
 #### What is deliberately excluded
 
@@ -876,6 +903,69 @@ $ unzip -q -n takeout-*.zip -d /mnt/bulk/photos
 contributes only what is new. Where the same file differs between exports it is
 usually harmless — Google re-renders `-edited.jpg` images on each export, and
 `supplemental-metadata.json` carries a view counter that ticks up.
+
+#### Offsite to B2
+
+`offsite-backup` replicates both local repositories to Backblaze B2 with
+`restic copy`, rather than backing up from source a second time. Copy preserves
+snapshot IDs and history, so the offsite repository is a drop-in replacement in
+a disaster rather than a parallel timeline with its own snapshots; it never
+re-reads the source trees, so 27 GB of photos stay on disk while only new packs
+move; and it inherits whatever retention `mail-backup` and `bulk-backup`
+already decided, instead of needing a third forget policy kept in step.
+
+B2 because the data is small once deduplicated and compressed — 25.5 GiB for
+photos and gdrive, 11.9 GiB for mail, so roughly 37 GB, about $0.22/month.
+Glacier is cheaper to hold and dear to read, and a backup you are reluctant to
+restore from is a worse backup. B2 egress is free up to 3× stored, so a full
+recovery costs nothing.
+
+Server-side encryption is left **disabled** on the bucket, deliberately. Restic
+encrypts client-side before anything is uploaded, so B2 only ever receives
+opaque packs. SSE-B2 layered on top would defend against raw disk access in a
+Backblaze datacenter — already defeated — while doing nothing about a
+compromised account, which sees the data transparently decrypted.
+
+**Two things will bite on a rebuild.**
+
+*The repository must be created with `--copy-chunker-params`.* Restic chooses
+chunker parameters per repository, and `restic copy` between repositories with
+different parameters re-chunks every blob: nothing deduplicates and the whole
+world uploads. This cannot be fixed afterwards — a mismatched repository has to
+be recreated. Init it from an existing repository:
+
+```
+$ export B2_ACCOUNT_ID=$(secret-tool lookup service b2 repo offsite field account)
+$ export B2_ACCOUNT_KEY=$(secret-tool lookup service b2 repo offsite field key)
+$ RESTIC_REPOSITORY=b2:jrw-restic-offsite:restic \
+  RESTIC_PASSWORD_COMMAND='secret-tool lookup service restic repo offsite' \
+  RESTIC_FROM_REPOSITORY=/mnt/t9/bulk-restic \
+  RESTIC_FROM_PASSWORD_COMMAND='secret-tool lookup service restic repo bulk' \
+  restic init --copy-chunker-params
+```
+
+*B2 accounts ship with a storage cap, and the default is the 10 GB free tier.*
+The first seed here died at 11.8 GB with `403: Cannot upload files, storage cap
+exceeded` — after uploading 664 data packs but before writing a single snapshot
+object, which left a repository full of data and nothing restorable in it.
+Raise it under **Caps & Alerts** before the first seed; 100 GB leaves room over
+the ~37 GB in use. Check the daily *download* cap at the same time — it does
+not matter until a restore, which is exactly the wrong moment to discover it.
+
+Nothing is lost when this happens: the packs already uploaded are reused, so
+re-running picks up where it stopped rather than starting over.
+
+The script does **no** `forget` or `prune`, on purpose — retention belongs to
+the local repositories, and pruning independently here would either fight those
+decisions or silently drift from them. `restic check` runs structure-only for a
+related reason: `--read-data` would re-download the entire repository every
+week, which the free egress allowance would not survive, and restic verifies
+checksums on restore anyway.
+
+**The offsite password is the single point of failure for disaster recovery.**
+If the machine is gone, the keyring holding it went with it, and that password
+in 1Password is the only thing between you and 37 GB of unrecoverable
+ciphertext. Confirm it is reachable *without* this machine.
 
 #### Google Drive and Takeout
 
