@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+#
+# bulk-backup
+#
+# Snapshot the irreplaceable parts of /mnt/bulk into a restic repository on the
+# T9, which is separate hardware. That separation is the entire point: the mail
+# repository lives on /mnt/bulk and is backed up nightly, but a backup sharing a
+# disk with its source survives an accidental delete and not a dead disk.
+#
+# Scope is photos and gdrive, deliberately, and not all of /mnt/bulk:
+#
+#   photos/       the merged Google Photos tree. Three exports went into it and
+#                 no single one was complete -- each carried whole albums the
+#                 others lacked -- so it cannot be reconstructed by downloading
+#                 Takeout again. This is the irreplaceable one.
+#   gdrive/       rclone mirror of Drive. Recoverable in principle, but only
+#                 through another OAuth run and a long re-download.
+#
+#   mail-restic/  excluded: already a restic repository with its own nightly
+#                 timer. Nesting one inside another stores opaque encrypted
+#                 packs that dedupe against nothing, doubling the space for no
+#                 recovery benefit. Replicate it with `restic copy` instead.
+#
+# Configuration:
+#   BULK_BACKUP_REPO   restic repository (default: /mnt/t9/bulk-restic)
+#   BULK_BACKUP_SRC    space-separated paths (default: photos and gdrive)
+#
+# The repository password lives in the login keyring, beside the mail one:
+#
+#   secret-tool store --label='restic (bulk backup)' service restic repo bulk
+#
+# Keep a copy in 1Password. It is the encryption key: lose it and the backup is
+# unrecoverable, keyring or not.
+
+set -euo pipefail
+
+repo="${BULK_BACKUP_REPO:-/mnt/t9/bulk-restic}"
+read -r -a sources <<< "${BULK_BACKUP_SRC:-/mnt/bulk/photos /mnt/bulk/gdrive}"
+
+# The T9 is removable, so absence is the normal case rather than an error. Exit
+# 69/EX_UNAVAILABLE, which the systemd unit maps to success: a missed snapshot
+# because the drive is unplugged is not a fault worth alerting on, and a unit
+# that cries wolf every day is one nobody reads.
+if ! mountpoint -q "$(dirname "$repo")"; then
+    echo "bulk-backup: $(dirname "$repo") is not mounted -- is the T9 plugged in?" >&2
+    exit 69
+fi
+if [ ! -d "$repo" ]; then
+    echo "bulk-backup: $repo not found. Create it once with:" >&2
+    echo "  RESTIC_REPOSITORY=$repo \\" >&2
+    echo "  RESTIC_PASSWORD_COMMAND='secret-tool lookup service restic repo bulk' \\" >&2
+    echo "  restic init" >&2
+    exit 69
+fi
+
+for s in "${sources[@]}"; do
+    if [ ! -d "$s" ]; then
+        echo "bulk-backup: source $s does not exist" >&2
+        exit 69
+    fi
+done
+
+export RESTIC_REPOSITORY="$repo"
+export RESTIC_PASSWORD_COMMAND="secret-tool lookup service restic repo bulk"
+
+restic backup "${sources[@]}" --tag bulk --verbose
+
+# A deeper ladder than mail-backup's. Photos are an archive rather than a
+# working set: the failure worth defending against is a delete or a corruption
+# noticed months later, not yesterday's mistake.
+restic forget --tag bulk \
+    --keep-daily 7 --keep-weekly 8 --keep-monthly 36 --prune
+
+# Structural check every run, plus a data sample so bit-rot on the backup drive
+# surfaces on its own rather than at restore time.
+restic check --read-data-subset=2%

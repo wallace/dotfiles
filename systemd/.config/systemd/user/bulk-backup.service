@@ -1,0 +1,28 @@
+# Snapshot /mnt/bulk's irreplaceable trees into restic on the T9.
+#
+# Unlike mail-backup, whose repository is on an always-present internal volume,
+# this one targets removable hardware on purpose -- separate hardware is what
+# makes it a real backup rather than a second copy on the same disk. The cost is
+# that the drive is often absent, which the exit status below accounts for.
+[Unit]
+Description=Snapshot /mnt/bulk photos and gdrive into restic on the T9
+Documentation=man:restic(1)
+# The source must be there. The destination deliberately is not required: an
+# absent T9 is handled in the script, which distinguishes "not plugged in" from
+# "plugged in and broken".
+RequiresMountsFor=/mnt/bulk
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin
+Environment=BULK_BACKUP_REPO=/mnt/t9/bulk-restic
+ExecStart=%h/bin/bulk-backup
+
+# 69/EX_UNAVAILABLE means the T9 was not plugged in, which is the expected
+# state most days rather than a fault. Treating it as success keeps the unit
+# green for the normal case, so that a red one means something actually broke.
+# Use `journalctl -u bulk-backup` to see whether a given day's run did work.
+SuccessExitStatus=69
+
+Nice=10
+IOSchedulingClass=idle
