@@ -451,7 +451,7 @@ Verify a change without connecting anywhere:
 $ ssh -G github.com | grep -iE 'identityagent|hashknownhosts'
 ```
 
-#### macOS-only packages
+### macOS-only packages
 
 These place files under `~/Library` or depend on macOS-only facilities, so
 skip them on Linux:
@@ -643,7 +643,7 @@ Setup, once per machine:
    ```
 
    **Expect the archive sync to be interrupted.** Gmail caps IMAP downloads at
-   2500 MB/day; All Mail here is ~6.5 GB, so the cold sync trips it and the
+   2500 MB/day; All Mail here is ~4 GB, so the cold sync trips it and the
    server closes the connection with:
 
    ```
@@ -669,7 +669,7 @@ instance name:
 | Timer | Runs | Why that cadence |
 | --- | --- | --- |
 | `mailsync@gmail-inbox.timer` | every 5 min | Inbox-only syncs finish in seconds |
-| `mailsync@gmail.timer` | hourly | Full sweep reconciles ~41k UIDs in All Mail; takes a few minutes |
+| `mailsync@gmail.timer` | hourly | Full sweep reconciles ~42k UIDs in All Mail; seconds once warm, minutes on a cold index |
 
 ```
 $ stow -t ~ systemd
@@ -699,6 +699,68 @@ Day to day, `O` in neomutt syncs everything and `o` syncs only the inbox. Both
 call `mailsync`, which runs `notmuch new` afterwards — mbsync has no equivalent
 of offlineimap's `postsynchook`, so the wrapper supplies it.
 
+#### Gmail labels in neomutt
+
+IMAP does not carry Gmail's labels. Every message `mbsync` writes to disk
+arrives with no record of which labels it had, and no amount of local
+processing reconstructs them — that information exists only on Google's
+servers, which makes this a one-way door. Delete mail from Gmail to reclaim
+storage and its labels go with it, even though the Maildir survives.
+
+`mail-labels` closes that gap. Gmail exposes the mapping through the IMAP
+extension `X-GM-RAW`, which accepts Gmail's own search syntax, so the script
+walks each label and category, resolves the matches to Message-IDs, and applies
+them to notmuch as `gmail/`-prefixed tags:
+
+```
+$ mail-labels --dry-run       # report counts, change nothing
+$ mail-labels                 # every label, category, and is:important
+$ mail-labels --skip-important
+```
+
+As notmuch tags these are live queries rather than the inert `X-Gmail-Labels`
+header a Takeout export carries, so `tag:gmail/2020-taxes` works in neomutt
+today. Re-running is safe: applying a tag a message already has is a no-op.
+
+**Two things to know before relying on a run.**
+
+It only tags what notmuch has indexed. A run against a half-synced archive
+silently covers only the local part — the first run here applied 1,311 of 1,430
+fetched tags, and three small hand-made labels came out empty because every one
+of their messages lived in the un-synced remainder. The script's closing
+`tagged N messages` counts Message-IDs fetched from Gmail, *not* tags applied,
+so it will not tell you this happened. **Finish the archive sync first**, then
+run it, then check `notmuch search --output=tags '*'`.
+
+`is:important` is 22k messages against ~1.8k for everything else combined, and
+resolving it means fetching that many Message-IDs. Worth skipping with
+`--skip-important` while the account is still under the OVERQUOTA throttle.
+
+Only adding is supported: a label removed in Gmail after a run leaves its tag
+behind.
+
+#### Reaching the tags from neomutt
+
+`.muttrc` points neomutt at the same notmuch database, which is what makes
+those tags visible. Without it neomutt only ever opens the plain Maildir
+directories under `mailboxes` and the database may as well not exist:
+
+- `nm_default_url` — must be an absolute path. Unlike `folder`, a leading `~`
+  is rejected outright; `$HOME` does expand, which keeps the line portable.
+- `%g` in `index_format` renders a message's tags, right-justified with `%>`
+  so that varying tag lengths do not start every subject in a different column.
+- `sidebar_format` uses `%D`, not `%B`. `%B` is the raw mailbox name, which for
+  a notmuch search is the entire URL — the sidebar read `query=tag:unre`
+  instead of `Unread`. `%D` is the descriptive name and falls back to the
+  mailbox name for Maildirs.
+- `named-mailboxes` declares saved searches. Note `virtual-mailboxes` is gone
+  in current NeoMutt; this is its replacement.
+
+Key bindings: **`X`** prompts for any notmuch query and opens the results as a
+folder — the one that earns its keep, since a label needs no sidebar entry to
+be reachable. **`L`** edits tags on the selected message, **`Ctrl-T`** expands a
+thread. All three are notmuch-only and do nothing in a Maildir folder.
+
 **Deletion semantics differ per folder, deliberately.** INBOX, sent, and drafts
 use `Expunge Both`: in Gmail's IMAP model an expunge from INBOX merely removes
 the Inbox label, so the message survives in All Mail — that is an archive, not
@@ -710,6 +772,144 @@ Editing `.mbsyncrc` has one sharp edge: **a blank line ends a section.**
 Comments inside a section are fine, but separate keywords with a blank line and
 everything after it parses as a global, failing with "not a recognized
 section-starting or global keyword".
+
+### Backups (restic)
+
+Two restic repositories on two physical disks, each with its own password in
+the login keyring:
+
+```
+~/.mail ─────────────────► /mnt/bulk/mail-restic   nightly    (mail-backup)
+/mnt/bulk/{photos,gdrive} ► /mnt/t9/bulk-restic    weekly     (bulk-backup)
+```
+
+Why restic rather than tarballs: snapshots are deduplicated and incremental, so
+only changed data moves after the first run, and `restic check` can prove the
+repository is still readable. A backup nobody has verified is not a backup.
+
+Why two repositories on two disks: `mail-restic` lives on `/mnt/bulk` and is
+therefore a second copy on the same disk as everything else there. That
+survives an accidental delete or a corrupted file; it does not survive the
+disk. The T9 exists to be separate hardware.
+
+**Neither is offsite.** Both copies are in the same machine, so fire, theft and
+a mistaken `sudo` are all still uncovered.
+
+#### Setup, once per machine
+
+Each repository needs its own password in the keyring. **Keep both in
+1Password** — the password is the encryption key, and losing it makes the
+repository unrecoverable regardless of what the keyring holds:
+
+```
+$ secret-tool store --label='restic (mail backup)' service restic repo mail
+$ secret-tool store --label='restic (bulk backup)' service restic repo bulk
+```
+
+`/mnt/bulk` is the internal 11 TB volume. The T9 is a removable 4 TB SSD, ext4,
+mounted at `/mnt/t9` from `/etc/fstab` with `nofail` so an absent drive does not
+block boot. Create the repositories once:
+
+```
+$ RESTIC_REPOSITORY=/mnt/bulk/mail-restic \
+  RESTIC_PASSWORD_COMMAND='secret-tool lookup service restic repo mail' restic init
+$ RESTIC_REPOSITORY=/mnt/t9/bulk-restic \
+  RESTIC_PASSWORD_COMMAND='secret-tool lookup service restic repo bulk' restic init
+```
+
+Then enable the timers:
+
+```
+$ stow -t ~ systemd scripts
+$ systemctl --user daemon-reload
+$ systemctl --user enable --now mail-backup.timer bulk-backup.timer
+```
+
+| Timer | Runs | Covers |
+| --- | --- | --- |
+| `mail-backup.timer` | daily 03:30 | `~/.mail`, including the notmuch database and its `gmail/` tags |
+| `bulk-backup.timer` | Sun 04:30 | `/mnt/bulk/photos` and `/mnt/bulk/gdrive` |
+
+Daily and weekly rather than hourly because every run does `forget --prune` and
+a read-data check on top of the snapshot — far too much work to repeat hourly
+for a Maildir that gains a few hundred messages a day, let alone photo trees
+that change a few times a year. Daily also matches the retention ladder, which
+keeps 14 dailies.
+
+#### Details the units have to handle
+
+- **PATH and environment.** systemd's user manager sees neither Homebrew nor
+  `~/bin`, and never sources `.zshrc`. Both units set PATH explicitly, and
+  `mail-backup.service` repeats `MAIL_BACKUP_REPO` because the export in
+  `zsh/.zshrc` is invisible to it. **Those two have to be kept in step.**
+- **`RequiresMountsFor=/mnt/bulk`.** Without it a failed mount leaves the
+  mountpoint an empty directory, and restic cheerfully initialises a fresh
+  empty repository inside it — reporting success while backing up nothing.
+- **`SuccessExitStatus=75`** on `mail-backup`. It shares `mailsync`'s flock so a
+  snapshot never races a sync, and gives up with 75/`EX_TEMPFAIL` after 15
+  minutes. That is a scheduling collision, not a fault.
+- **`SuccessExitStatus=69`** on `bulk-backup`. The T9 is removable, so most
+  weeks it is simply not plugged in; `bulk-backup` exits 69/`EX_UNAVAILABLE`
+  for that. Mapping it to success keeps the unit green for the expected case,
+  so a red one means something actually broke. Check `journalctl --user -u
+  bulk-backup` to see which runs did real work.
+
+#### What is deliberately excluded
+
+`bulk-backup` covers `photos` and `gdrive`, not all of `/mnt/bulk`.
+
+`mail-restic` is excluded because it is already a restic repository with its
+own timer. Nesting one inside another stores opaque encrypted packs that dedupe
+against nothing — double the space, no recovery benefit. Use `restic copy` if
+it ever needs replicating.
+
+`photos/` is the one that cannot be reconstructed. Three separate Google Photos
+exports went into it and **no single one was complete** — each carried whole
+albums the others lacked, 307 files in each direction between the most recent
+two. Downloading Takeout again would not reproduce it. Merge, do not replace:
+
+```
+$ unzip -q -n takeout-*.zip -d /mnt/bulk/photos
+```
+
+`-n` never overwrites, so the existing copy wins on collision and the archive
+contributes only what is new. Where the same file differs between exports it is
+usually harmless — Google re-renders `-edited.jpg` images on each export, and
+`supplemental-metadata.json` carries a view counter that ticks up.
+
+#### Google Drive and Takeout
+
+`drive-backup` mirrors Drive to `/mnt/bulk/gdrive` with `rclone copy`,
+deliberately not `sync` — sync mirrors deletions, which defeats the purpose
+when the point is to delete from Google and keep the local copy. Google-native
+files are exported to Office formats on the way out, or they would be silently
+omitted. Needs `rclone config` once, which requires a browser for OAuth.
+`drive-dupes` reports names Drive allows to collide but a filesystem does not.
+
+`takeout-sweep` moves Takeout archives from `~/Downloads` to
+`/mnt/bulk/takeout` as they land. It stages, it does not extract.
+
+Verify a Takeout download before trusting it — this is cheap and catches the
+silent truncation that is the whole reason to check:
+
+```
+$ unzip -tqq takeout-*.zip      # zip: CRC-checks every entry, silent on success
+$ gzip -t /mnt/bulk/takeout/*.tgz
+```
+
+#### A caution learned the hard way
+
+The T9 was NTFS until it was reformatted. Every unclean unplug left the volume
+dirty and unmountable until someone ran `ntfsfix` by hand, and it eventually
+accumulated real filesystem damage — 330 unreadable directory entries whose
+`stat` returned `EINVAL`, which is what prompted re-downloading Takeout in the
+first place. It is ext4 now. **Unmount before unplugging**
+(`udisksctl unmount -b /dev/…`) regardless.
+
+When addressing a disk in a destructive command, use `/dev/disk/by-id/` rather
+than `/dev/sdX`. The letters are assignment order, not identity, and they *do*
+move between boots — the T9 and the 11 TB bulk volume swapped letters partway
+through this setup, which very nearly aimed a `wipefs` at the wrong disk.
 
 ### macOS-only packages
 
