@@ -1,0 +1,17 @@
+# Weekly, not nightly. photos and gdrive change rarely -- a Takeout export every
+# few months, an occasional rclone run -- so a nightly snapshot would mostly
+# record that nothing happened, while still paying for a prune and an integrity
+# check each time.
+[Unit]
+Description=Weekly restic snapshot of /mnt/bulk onto the T9
+
+[Timer]
+OnCalendar=Sun 04:30
+# Essential here, more than for mail-backup: the T9 is removable, so a run is
+# skipped whenever it is unplugged. Persistent makes the next boot with the
+# drive attached catch up, rather than waiting a further week.
+Persistent=true
+RandomizedDelaySec=30min
+
+[Install]
+WantedBy=timers.target
