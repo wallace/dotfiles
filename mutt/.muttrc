@@ -86,20 +86,53 @@ set nm_exclude_tags = "deleted spam"
 # is heading for 40k messages.
 set nm_open_timeout = 30
 
-# Saved searches, listed in the sidebar beneath the Maildir folders. All
-# three work today, and each one crosses folder boundaries in a way no
-# Maildir entry above can -- a `flagged` search is left out precisely
-# because the Maildir folder of that name already is one.
-#
-# Label-backed searches need `mail-labels` to have run first, since until
-# then no gmail/ tag exists for a query to match, and then take the same
-# shape:
-#
-#   named-mailboxes "Taxes" "notmuch://?query=tag:gmail/2020-taxes"
-#
+# Saved searches, listed in the sidebar beneath the Maildir folders. Each one
+# crosses folder boundaries in a way no Maildir entry above can -- a `flagged`
+# search is left out precisely because the Maildir folder of that name already
+# is one.
 named-mailboxes "Attachments" "notmuch://?query=tag:attachment"
 named-mailboxes "Unread"      "notmuch://?query=tag:unread"
 named-mailboxes "Last 7 days" "notmuch://?query=date:7d.."
+
+# Gmail labels. These are not folders and never sync as Maildirs -- in Gmail a
+# labelled message lives in All Mail and carries the label, so syncing one
+# channel per label would store the same message many times over. `mail-labels`
+# imports them as gmail/ notmuch tags instead, and these lines are what puts
+# them in the sidebar. They only resolve once mail-labels has run.
+#
+# Hand-made labels only. Gmail's automatic category tabs -- primary,
+# promotions, updates, social, forums -- and is:important are all present as
+# gmail/ tags and reachable with X, but they are Google's classification rather
+# than anything filed deliberately, so they stay out of the sidebar.
+# gmail/important is also 22k messages, and `mail_check_stats` re-counts every
+# sidebar entry on refresh, which is free for a handful and is not for that.
+# Triage lanes. These replace the habit Gmail's category tabs supported --
+# skim the bulk, read the rest properly -- without importing Google's
+# classification, which mail-labels could only ever capture as a stale 4%
+# snapshot of the archive.
+#
+# The split is on headers the sender set, so it covers all 42k messages and
+# stays correct for mail that arrives tomorrow. List-Unsubscribe is the strong
+# signal: about three quarters of what lands in INBOX carries it. list: catches
+# proper mailing lists, which mostly overlap but not entirely.
+#
+# List-Unsubscribe is not one of the headers notmuch indexes by default. It is
+# searchable here because of:
+#
+#   notmuch config set index.header.LIST_UNSUB List-Unsubscribe
+#   notmuch reindex '*'
+#
+# both of which are required, and the reindex has to be re-run after changing
+# the setting or the prefix silently matches nothing. Note the bare wildcard
+# LIST_UNSUB:* does not work on a custom prefix -- it needs a real term, hence
+# matching on the http/mailto the header value always starts with.
+named-mailboxes "Direct"      "notmuch://?query=folder:INBOX and not (LIST_UNSUB:http* or LIST_UNSUB:mailto* or list:*)"
+named-mailboxes "Bulk"        "notmuch://?query=folder:INBOX and (LIST_UNSUB:http* or LIST_UNSUB:mailto* or list:*)"
+
+named-mailboxes "Taxes 2020"  "notmuch://?query=tag:gmail/2020-taxes"
+named-mailboxes "Doblet"      "notmuch://?query=tag:gmail/doblet"
+named-mailboxes "Domains"     "notmuch://?query=tag:gmail/domain-name-administration"
+named-mailboxes "ProgramEquity" "notmuch://?query=tag:gmail/programequity"
 
 # X is the one that earns its keep: it prompts for any notmuch query and opens
 # the results as a folder, so a label is reachable without a sidebar entry of
