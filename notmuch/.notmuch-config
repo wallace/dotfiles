@@ -87,3 +87,19 @@ exclude_tags=deleted;spam;
 #
 [maildir]
 synchronize_flags=true
+
+# Index configuration
+#
+# notmuch indexes a fixed set of headers by default, and List-Unsubscribe is
+# not among them. .muttrc's Direct/Bulk triage lanes split the inbox on it --
+# roughly three quarters of arriving mail carries it -- so it has to be indexed
+# explicitly here.
+#
+# Two things to know. Adding or changing this takes effect only after
+# `notmuch reindex '*'`, which is a one-time cost of about a minute for 42k
+# messages; without it the prefix silently matches nothing. And the bare
+# wildcard LIST_UNSUB:* does not work on a custom prefix -- a query needs a
+# real term, hence .muttrc matching the http/mailto that the header value
+# always begins with.
+[index]
+header.LIST_UNSUB=List-Unsubscribe
