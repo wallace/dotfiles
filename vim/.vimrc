@@ -68,6 +68,7 @@ let g:gitgutter_eager = 0
 
 source ~/.vim/config/SudoW.vim
 source ~/.vim/config/auto-pairs.vim
+source ~/.vim/config/clipboard.vim
 source ~/.vim/config/clojure.vim
 source ~/.vim/config/colorscheme.vim
 source ~/.vim/config/completion.vim
