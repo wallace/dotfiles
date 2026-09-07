@@ -1,0 +1,27 @@
+#!/bin/sh
+#
+# notmuch post-new hook -- runs automatically after every `notmuch new`.
+#
+# Makes tag:inbox mean "is in the INBOX folder".
+#
+# It did not before. `[new] tags=unread;inbox;` in .notmuch-config applies its
+# tags to every message notmuch indexes, with no notion of which folder the
+# file is in, so all 42k messages carried `inbox` -- the entire Gmail archive
+# included -- and the tag was useless as a filter. .muttrc worked around it by
+# querying folder:INBOX directly.
+#
+# Adding is only half of it. In Gmail's model a message lives in All Mail and
+# INBOX is a label, so mbsync writes the same message into both directories:
+# ~2.7k of the 42k are in INBOX and archive at once. Archiving in Gmail removes
+# the Inbox label, mbsync expunges the INBOX copy, and the archive copy stays.
+# A hook that only ever added `inbox` would therefore never let go of it, and
+# the tag would drift back to meaningless as mail is archived.
+#
+# So: add to everything in INBOX that lacks it, remove from everything tagged
+# but no longer there. Both halves are needed for the tag to stay true.
+
+# +inbox for INBOX mail that is missing it
+notmuch tag +inbox -- folder:INBOX and not tag:inbox
+
+# -inbox for anything tagged that has left the folder
+notmuch tag -inbox -- tag:inbox and not folder:INBOX

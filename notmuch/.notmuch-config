@@ -14,6 +14,10 @@
 # Non-absolute database paths are taken relative to $HOME (notmuch-config(5)),
 # which keeps this file portable across machines and users.
 path=.mail/jonathanwallace-gmail.com
+# Likewise relative to $HOME. The hooks live in the dotfiles repo and are
+# stowed to ~/.mail-hooks rather than sitting untracked inside the Maildir
+# at .notmuch/hooks, which is data rather than configuration.
+hook_dir=.mail-hooks
 
 # User configuration
 #
@@ -48,8 +52,13 @@ primary_email=jonathan.wallace@gmail.com
 #		names will be ignored, independent of its depth/location
 #		in the mail store.
 #
+# `inbox` is deliberately not here. Tags in this list are applied to every
+# message notmuch indexes, regardless of which folder the file is in, so
+# listing it stamped all 42k messages -- the whole Gmail archive included --
+# and made tag:inbox useless as a filter. The post-new hook in
+# database.hook_dir sets and clears it against folder:INBOX instead.
 [new]
-tags=unread;inbox;
+tags=unread;
 ignore=
 
 # Search configuration
