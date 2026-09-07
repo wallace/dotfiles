@@ -761,6 +761,62 @@ folder — the one that earns its keep, since a label needs no sidebar entry to
 be reachable. **`L`** edits tags on the selected message, **`Ctrl-T`** expands a
 thread. All three are notmuch-only and do nothing in a Maildir folder.
 
+#### What the sidebar lists
+
+Five Maildir folders, then saved notmuch searches. The searches are the useful
+part, because a Gmail label is not a folder — a labelled message lives in All
+Mail and carries the label, so syncing one mbsync channel per label would store
+the same message many times over. `mail-labels` imports them as tags instead
+and `named-mailboxes` puts them in the sidebar.
+
+| Entry | Query | For |
+| --- | --- | --- |
+| Attachments, Unread, Last 7 days | `tag:attachment`, `tag:unread`, `date:7d..` | cross-folder views |
+| Direct | `folder:INBOX and not (LIST_UNSUB:http* or LIST_UNSUB:mailto* or list:*)` | mail a person sent you |
+| Bulk | `folder:INBOX and (LIST_UNSUB:http* or LIST_UNSUB:mailto* or list:*)` | mail a system sent you |
+| Taxes 2020, Doblet, Domains, ProgramEquity | `tag:gmail/…` | the hand-made Gmail labels |
+
+**The Direct/Bulk split replaces Gmail's category tabs**, which is the habit
+they were supporting: skim the bulk, read the rest properly. It deliberately
+does not reproduce the tabs themselves. `mail-labels` does import them —
+`gmail/promotions`, `gmail/updates`, `gmail/social`, `gmail/forums`,
+`gmail/primary` — but between them they cover 1,818 of 42,849 messages, a 4%
+snapshot frozen at whenever it last ran, with nothing re-tagging mail that
+arrives afterwards. A Promotions folder reading 231 while thousands of
+promotional messages sat outside it would look authoritative and be wrong.
+`gmail/important` has the same problem plus 22k messages that
+`mail_check_stats` would re-count on every sidebar refresh.
+
+Splitting on `List-Unsubscribe` instead uses a header the sender set, so it
+covers all 42k messages and keeps working for mail that has not arrived yet.
+It is a strong signal here: 577 of 757 sampled inbox messages carry it. INBOX
+divides 911 direct against 1,783 bulk, and of the unread, 552 against 1,604 —
+a fair measure of what the tab habit was actually protecting against.
+
+The category tags are still there and still reachable with `X`
+(`tag:gmail/promotions`), where a partial result reads as a query rather than
+as a folder.
+
+**`List-Unsubscribe` has to be indexed explicitly.** notmuch indexes a fixed
+set of headers and that is not one, hence the `[index]` section in
+`.notmuch-config`. Two traps:
+
+```
+$ notmuch config set index.header.LIST_UNSUB List-Unsubscribe
+$ notmuch reindex '*'          # required; ~1 minute for 42k messages
+```
+
+The reindex has to be re-run after any change to the setting, or the prefix
+silently matches nothing rather than erroring. And a bare `LIST_UNSUB:*`
+wildcard does not work on a custom prefix — a query needs a real term, which is
+why `.muttrc` matches the `http`/`mailto` that the header value always begins
+with.
+
+**`tag:inbox` is useless as a filter, which is why these queries use
+`folder:INBOX`.** `[new] tags=unread;inbox;` in `.notmuch-config` stamps
+`inbox` on every message notmuch indexes, so all 42,849 carry it — the entire
+archive included.
+
 **Deletion semantics differ per folder, deliberately.** INBOX, sent, and drafts
 use `Expunge Both`: in Gmail's IMAP model an expunge from INBOX merely removes
 the Inbox label, so the message survives in All Mail — that is an archive, not
