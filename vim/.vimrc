@@ -105,4 +105,9 @@ set splitright
 nnoremap <CR> :noh<CR><CR>
 nnoremap <leader>. :vs<CR>:OpenAlternate<CR>
 
-let g:python3_host_prog = '/Users/jonathanwallace/.pyenv/versions/neovim3/bin/python'
+" Neovim's Python host, for plugins that need pynvim. The dedicated pyenv
+" environment only exists on the Mac; elsewhere let Neovim find python3 itself.
+let s:neovim_python = expand('~/.pyenv/versions/neovim3/bin/python')
+if executable(s:neovim_python)
+  let g:python3_host_prog = s:neovim_python
+endif
