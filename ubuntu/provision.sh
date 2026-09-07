@@ -33,6 +33,7 @@ EMOJI_FONT_CHOICE="" # ibus emoji picker font, reported in the summary
 EMOJI_HOTKEY_CHOICE="" # ibus emoji hotkey split, reported in the summary
 EMOJI_EXT_CHOICE=""  # Emoji Copy extension presence, reported in the summary
 EMOJI_MGR_CHOICE=""  # Extension Manager package state, reported in the summary
+EMOJI_KEY_CHOICE=""  # Emoji Copy shortcut, reported in the summary
 WAYPIPE_CHOICE=""    # waypipe presence, reported in the summary
 
 # Reuse the installer functions from the minimal script by sourcing the parts
@@ -110,9 +111,21 @@ setup_keyboard() {
 # (extensions.gnome.org/extension/6242):
 #
 #   1. Points the ibus picker at a colour font; it ships 'Monospace 16'.
-#   2. Drops Super+. from the ibus hotkey list, leaving Super+;, so the
-#      extension can take Super+. for itself.
-#   3. Reports whether the extension is actually there.
+#   2. Drops Super+. from the ibus hotkey list, leaving Super+;.
+#   3. Puts the extension's own shortcut on Super+comma.
+#   4. Reports whether the extension is actually there.
+#
+# Super+comma, not Super+period, and this is the part worth reading. GNOME
+# reserves Super+. at a level a shell extension cannot outrank: the extension
+# registers the grab, gnome-shell reports it ACTIVE, no error is logged
+# anywhere, and the chord simply never reaches it. What you get instead is
+# ibus answering nearby chords, which inserts fine into GTK apps and does
+# nothing in Electron ones — so the failure reads like an Electron
+# incompatibility, or a GNOME version regression, or a broken input method.
+# It is none of those. Freeing Super+. from ibus, which this function used to
+# do on the theory that ibus was the competitor, does not help either: the
+# reservation is GNOME's, not ibus's. Moving the extension one key over makes
+# it work everywhere, Electron included.
 #
 # Installing it is deliberately left to the user, for the same reason
 # setup_ubuntu_pro is: extensions.gnome.org signs nothing, so there is no
@@ -138,6 +151,7 @@ setup_emoji_input() {
     warn "gsettings not found — skipping emoji setup."
     EMOJI_FONT_CHOICE="skipped (no gsettings)"
     EMOJI_HOTKEY_CHOICE="skipped (no gsettings)"
+    EMOJI_KEY_CHOICE="skipped (no gsettings)"
     return 0
   }
 
@@ -148,6 +162,7 @@ setup_emoji_input() {
     warn "Re-run from a desktop session."
     EMOJI_FONT_CHOICE="skipped (no session D-Bus)"
     EMOJI_HOTKEY_CHOICE="skipped (no session D-Bus)"
+    EMOJI_KEY_CHOICE="skipped (no session D-Bus)"
     return 0
   }
 
@@ -156,6 +171,7 @@ setup_emoji_input() {
     warn "ibus emoji schema unavailable — is ibus installed?"
     EMOJI_FONT_CHOICE="skipped (no ibus schema)"
     EMOJI_HOTKEY_CHOICE="skipped (no ibus schema)"
+    EMOJI_KEY_CHOICE="skipped (no ibus schema)"
     return 0
   }
 
@@ -207,8 +223,8 @@ setup_emoji_input() {
       ok "ibus already limited to Super+;" ;;
     "$keys_stock")
       if gsettings set "$schema" hotkey "$keys_want"; then
-        EMOJI_HOTKEY_CHOICE="Super+; (Super+. left for the extension)"
-        ok "ibus now Super+; — Super+. is free for Emoji Copy"
+        EMOJI_HOTKEY_CHOICE="Super+; (ibus keeps one chord, not two)"
+        ok "ibus now Super+; only"
       else
         warn "could not set $schema hotkey"
         EMOJI_HOTKEY_CHOICE="failed"
@@ -218,7 +234,41 @@ setup_emoji_input() {
       ok "custom emoji hotkeys set — leaving them alone" ;;
   esac
 
-  # --- 3. Extension Manager, and is the extension actually installed? ---
+  # --- 3. The extension's own shortcut ---
+
+  # Only meaningful once the extension is installed, and its schema ships with
+  # it rather than in a system directory, so this is a no-op until then. The
+  # extension re-reads the setting when it is enabled, so a value written here
+  # before installation is picked up the first time it runs.
+  local ext_dir="$HOME/.local/share/gnome-shell/extensions/emoji-copy@felipeftn"
+  local ext_schema="org.gnome.shell.extensions.emoji-copy"
+  local key_want="['<Super>comma']"
+
+  if [ -d "$ext_dir/schemas" ]; then
+    cur="$(gsettings --schemadir "$ext_dir/schemas" get "$ext_schema" emoji-keybind 2>/dev/null)" || cur=""
+    case "$cur" in
+      "$key_want")
+        EMOJI_KEY_CHOICE="Super+, (already set)"
+        ok "Emoji Copy already on Super+," ;;
+      "['<Super>period']"|"")
+        # The extension's own default, and the one that silently loses to
+        # GNOME. Ours to replace.
+        if gsettings --schemadir "$ext_dir/schemas" set "$ext_schema" emoji-keybind "$key_want"; then
+          EMOJI_KEY_CHOICE="Super+,"
+          ok "Emoji Copy shortcut set to Super+, (Super+. never reaches it)"
+        else
+          warn "could not set $ext_schema emoji-keybind"
+          EMOJI_KEY_CHOICE="failed"
+        fi ;;
+      *)
+        EMOJI_KEY_CHOICE="left as $cur"
+        ok "custom Emoji Copy shortcut $cur — leaving it alone" ;;
+    esac
+  else
+    EMOJI_KEY_CHOICE="not set (extension not installed)"
+  fi
+
+  # --- 4. Extension Manager, and is the extension actually installed? ---
 
   # Installing Extension Manager is a different question from installing an
   # extension. This is a signed package from the Ubuntu archive, carried by the
@@ -849,6 +899,7 @@ ${C_GREEN}───────────────────────�
   caps lock        ${KEYBOARD_CHOICE:-not configured}
   emoji font       ${EMOJI_FONT_CHOICE:-not configured}
   emoji hotkey     ${EMOJI_HOTKEY_CHOICE:-not configured}
+  emoji shortcut   ${EMOJI_KEY_CHOICE:-not configured}
   emoji picker     ${EMOJI_EXT_CHOICE:-not checked}
   ext manager      ${EMOJI_MGR_CHOICE:-not checked}
   waypipe          ${WAYPIPE_CHOICE:-not configured}

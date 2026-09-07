@@ -379,6 +379,7 @@ EMOJI_FONT_CHOICE="" # ibus emoji picker font, reported in the summary
 EMOJI_HOTKEY_CHOICE="" # ibus emoji hotkey split, reported in the summary
 EMOJI_EXT_CHOICE=""  # Emoji Copy extension presence, reported in the summary
 EMOJI_MGR_CHOICE=""  # Extension Manager package state, reported in the summary
+EMOJI_KEY_CHOICE=""  # Emoji Copy shortcut, reported in the summary
 WAYPIPE_CHOICE=""    # waypipe presence, reported in the summary
 
 # ---------------------------------------------------------------------------
@@ -449,7 +450,9 @@ setup_keyboard() {
 
 # Emoji input for the Emoji Copy shell extension (extension 6242). Ported from
 # provision.sh; see the long comment there for why installing the extension
-# itself stays manual while Extension Manager does not.
+# itself stays manual while Extension Manager does not, and why the shortcut
+# is Super+comma — GNOME reserves Super+period at a level an extension cannot
+# outrank, and the loss is silent: ACTIVE extension, no error, dead chord.
 #
 # Every bail-out returns 0, not 1: these are skips, not failures, and main()
 # calls this bare under `set -e`, where a non-zero return would abort the whole
@@ -459,6 +462,7 @@ setup_emoji_input() {
     warn "leaving emoji settings alone (SKIP_EMOJI=1)"
     EMOJI_FONT_CHOICE="skipped"
     EMOJI_HOTKEY_CHOICE="skipped"
+    EMOJI_KEY_CHOICE="skipped"
     return 0
   }
   step "Emoji: colour font for ibus, and freeing Super+. for the shell extension"
@@ -473,6 +477,7 @@ setup_emoji_input() {
     warn "gsettings not found — skipping emoji setup."
     EMOJI_FONT_CHOICE="skipped (no gsettings)"
     EMOJI_HOTKEY_CHOICE="skipped (no gsettings)"
+    EMOJI_KEY_CHOICE="skipped (no gsettings)"
     return 0
   }
 
@@ -481,6 +486,7 @@ setup_emoji_input() {
     warn "no session D-Bus — not touching the emoji settings."
     EMOJI_FONT_CHOICE="skipped (no session D-Bus)"
     EMOJI_HOTKEY_CHOICE="skipped (no session D-Bus)"
+    EMOJI_KEY_CHOICE="skipped (no session D-Bus)"
     return 0
   }
 
@@ -488,6 +494,7 @@ setup_emoji_input() {
     warn "ibus emoji schema unavailable — is ibus installed?"
     EMOJI_FONT_CHOICE="skipped (no ibus schema)"
     EMOJI_HOTKEY_CHOICE="skipped (no ibus schema)"
+    EMOJI_KEY_CHOICE="skipped (no ibus schema)"
     return 0
   }
 
@@ -537,6 +544,33 @@ setup_emoji_input() {
       EMOJI_HOTKEY_CHOICE="left as $cur"
       ok "custom emoji hotkeys set — leaving them alone" ;;
   esac
+
+  # The extension's own shortcut. Its schema ships with the extension rather
+  # than in a system directory, so this is a no-op until it is installed; the
+  # value is re-read when the extension is enabled.
+  local ext_dir="$HOME/.local/share/gnome-shell/extensions/emoji-copy@felipeftn"
+  local ext_schema="org.gnome.shell.extensions.emoji-copy"
+  if [ -d "$ext_dir/schemas" ]; then
+    cur="$(gsettings --schemadir "$ext_dir/schemas" get "$ext_schema" emoji-keybind 2>/dev/null)" || cur=""
+    case "$cur" in
+      "['<Super>comma']")
+        EMOJI_KEY_CHOICE="Super+, (already set)"
+        ok "Emoji Copy already on Super+," ;;
+      "['<Super>period']"|"")
+        if gsettings --schemadir "$ext_dir/schemas" set "$ext_schema" emoji-keybind "['<Super>comma']"; then
+          EMOJI_KEY_CHOICE="Super+,"
+          ok "Emoji Copy shortcut set to Super+,"
+        else
+          EMOJI_KEY_CHOICE="failed"
+          warn "could not set $ext_schema emoji-keybind"
+        fi ;;
+      *)
+        EMOJI_KEY_CHOICE="left as $cur"
+        ok "custom Emoji Copy shortcut $cur — leaving it alone" ;;
+    esac
+  else
+    EMOJI_KEY_CHOICE="not set (extension not installed)"
+  fi
 
   # Extension Manager is a signed archive package, so it installs here; Ubuntu
   # ships no graphical extension manager, and the summary tells you to open one.
@@ -939,6 +973,7 @@ ${C_GREEN}───────────────────────�
   caps lock        ${KEYBOARD_CHOICE:-not configured}
   emoji font       ${EMOJI_FONT_CHOICE:-not configured}
   emoji hotkey     ${EMOJI_HOTKEY_CHOICE:-not configured}
+  emoji shortcut   ${EMOJI_KEY_CHOICE:-not configured}
   emoji picker     ${EMOJI_EXT_CHOICE:-not checked}
   ext manager      ${EMOJI_MGR_CHOICE:-not checked}
   waypipe          ${WAYPIPE_CHOICE:-not configured}
