@@ -812,10 +812,29 @@ wildcard does not work on a custom prefix — a query needs a real term, which i
 why `.muttrc` matches the `http`/`mailto` that the header value always begins
 with.
 
-**`tag:inbox` is useless as a filter, which is why these queries use
-`folder:INBOX`.** `[new] tags=unread;inbox;` in `.notmuch-config` stamps
-`inbox` on every message notmuch indexes, so all 42,849 carry it — the entire
-archive included.
+**These queries use `folder:INBOX` rather than `tag:inbox`** because the
+folder is the ground truth the tag is derived from, so it cannot drift if the
+hook below ever fails to run. Both give the same answer.
+
+`tag:inbox` used to be useless as a filter: `[new] tags=unread;inbox;` applies
+its tags to every message notmuch indexes regardless of folder, so all 42,849
+carried it, archive included. `inbox` has been dropped from that list and a
+`post-new` hook maintains it instead:
+
+```
+notmuch tag +inbox -- folder:INBOX and not tag:inbox
+notmuch tag -inbox -- tag:inbox and not folder:INBOX
+```
+
+Both halves matter. In Gmail's model a message lives in All Mail and INBOX is a
+label, so mbsync writes ~2.7k of the 42k into both directories at once;
+archiving removes the Inbox label, mbsync expunges the INBOX copy, and the
+archive copy remains. A hook that only added the tag would never let go of it
+and the drift would return.
+
+The hook lives in the repo and is stowed to `~/.mail-hooks`, pointed at by
+`database.hook_dir`, rather than sitting untracked at `.notmuch/hooks` inside
+the Maildir — that path is data, not configuration.
 
 **Deletion semantics differ per folder, deliberately.** INBOX, sent, and drafts
 use `Expunge Both`: in Gmail's IMAP model an expunge from INBOX merely removes
