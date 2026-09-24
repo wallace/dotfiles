@@ -140,6 +140,12 @@ export KEYTIMEOUT=1
 bindkey '^R' history-incremental-search-backward
 bindkey -M vicmd v edit-command-line
 
+# Atuin replaces Ctrl-R and up-arrow history search while preserving zsh's
+# history file as a fallback.
+if command -v atuin &> /dev/null; then
+    eval "$(atuin init zsh)"
+fi
+
 # Additional environment variables
 export COMPOSE_PROFILES="tourneys,frontend"
 
