@@ -55,6 +55,11 @@ hdr_order from: to: cc: date: subject:  # and in this order
 # Default inbox.
 set spoolfile = "+jonathanwallace-gmail.com/INBOX"
 
+# Postponed messages go to the Maildir mbsync syncs with Gmail's Drafts. Left
+# unset, neomutt postpones to ~/postponed -- a local file nothing syncs, and
+# not where `R` looks for a draft started in Gmail.
+set postponed = "+jonathanwallace-gmail.com/drafts"
+
 # Alternate email addresses.
 #alternates sjl@pculture.org still\.?life@gmail.com steve@ladyluckblues.com steve@pculture.org
 
