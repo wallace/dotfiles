@@ -1,0 +1,9 @@
+# Keep command history local unless sync is explicitly enabled later.
+auto_sync = false
+update_check = false
+
+# Preserve Atuin's built-in filtering for common credential formats.
+secrets_filter = true
+
+# Make repository-wide history available as a search filter.
+workspaces = true

@@ -135,7 +135,7 @@ change your shell if it gets dropped. Step 8 changes the shell instead.
 ```
 $ mv ~/.zshrc ~/.zshrc.bak 2>/dev/null; rm -f ~/.zshrc
 $ cd ~/dotfiles && stow -t ~ zsh bash git ssh vim nvim tmux readline ctags \
-    base16-shell scripts claude copilot-cli irb rspec rubygems \
+    base16-shell scripts claude copilot-cli atuin irb rspec rubygems \
     ruby_debugger rbenv obsidian kitty lein
 ```
 
@@ -400,6 +400,7 @@ $ stow base16-shell
 $ stow scripts
 $ stow claude
 $ stow copilot-cli
+$ stow atuin
 $ stow irb
 $ stow rspec
 $ stow rubygems
