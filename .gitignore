@@ -174,3 +174,9 @@ mutt/.mutt/mailcap
 claude/.claude/*
 !claude/.claude/settings.json
 !claude/.claude/skills/
+
+# ...but not the skills Claude syncs down from the claude.ai account. Those are
+# a machine-local cache under an opaque account/workspace UUID, re-downloaded on
+# demand, and the UUID path means nothing on another machine. Hand-written
+# skills under claude/.claude/skills/ stay tracked.
+claude/.claude/skills/synced/
