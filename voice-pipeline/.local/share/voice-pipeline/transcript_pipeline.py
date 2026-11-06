@@ -58,6 +58,7 @@ except ImportError:
 # --------------------------------------------------------------------------- #
 TIMESTAMP_RE = re.compile(r'^\*(\d{1,2}:\d{2}(?::\d{2})?)\*$')      # *00:08* or *01:01:08*
 SPEAKER_RE = re.compile(r'^\*\*Speaker\s+([^\*]+?)\*\*:\s*(.*)$')   # **Speaker 2**: text
+BLOCK_LABEL_RE = re.compile(r'^\*\*([^\*]+?)\*\*$')                  # **Speaker 2** on its own line
 LEADING_DASH_RE = re.compile(r'^-\s+')                              # "- text" bullet artifact
 FILENAME_DT_RE = re.compile(r'(\d{6})_(\d{4})$')                    # ...YYMMDD_HHMM
 
@@ -100,8 +101,47 @@ def strip_frontmatter(body: str) -> str:
     return body
 
 
+def parse_blocks(body: str):
+    """Parse the block export (label line, timestamp line, text):
+
+        **Speaker 1**
+        *00:02*
+        text
+
+    This is what MacWhisper's watch folder and teams-bridge write. Labels are
+    kept verbatim ('Speaker 1', or a real name once transcript-speakers has run);
+    'Unknown Speaker' (teams-bridge's NULL fallback) counts as unlabelled.
+    """
+    segments = []
+    cur = None
+    for raw in body.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        m = BLOCK_LABEL_RE.match(line)
+        if m:
+            if cur and cur['text']:
+                segments.append(cur)
+            label = m.group(1).strip()
+            cur = {'speaker': None if label == 'Unknown Speaker' else label,
+                   'text': '', 'ts': None}
+            continue
+        if cur is None:
+            cur = {'speaker': None, 'text': '', 'ts': None}
+        m = TIMESTAMP_RE.match(line)
+        if m and cur['ts'] is None and not cur['text']:
+            cur['ts'] = m.group(1)
+        else:
+            cur['text'] = f"{cur['text']} {LEADING_DASH_RE.sub('', line)}".strip()
+    if cur and cur['text']:
+        segments.append(cur)
+    return segments
+
+
 def parse_segments(body: str):
     """Split the export into atomic segments: {speaker, text, ts}."""
+    if any(BLOCK_LABEL_RE.match(l.strip()) for l in body.splitlines()):
+        return parse_blocks(body)
     segments = []
     buf = []
     for raw in body.splitlines():
