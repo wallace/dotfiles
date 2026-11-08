@@ -47,7 +47,23 @@ fi
 export RESTIC_REPOSITORY="$repo"
 export RESTIC_PASSWORD_COMMAND="secret-tool lookup service restic repo mail"
 
-restic backup "$HOME/.mail" --tag mail --verbose
+# The notmuch Xapian index is ~1 GB and is rewritten in place by every
+# `notmuch new`, so backing it up added ~500 MiB of fresh blobs per night
+# against a few MB of new mail -- the repo grew to 3x the Maildir and all of it
+# was replicated offsite. Almost none of it is worth keeping: `notmuch new`
+# rebuilds the index from the messages. The one thing it can't rebuild is the
+# tags, so dump those (plus config and properties) to a text file inside the
+# backed-up tree and leave the index out. Restore = `notmuch new` followed by
+# `notmuch restore --input=<dump>`.
+notmuch_dir="$(notmuch config get database.path)/.notmuch"
+dump="$notmuch_dir/notmuch.dump"
+# Write to a temp file and rename, so a failed dump never replaces the last
+# good one. The lock above keeps `notmuch new` from changing tags mid-dump.
+notmuch dump --output="$dump.tmp"
+mv -f "$dump.tmp" "$dump"
+
+restic backup "$HOME/.mail" --tag mail --verbose \
+    --exclude "$notmuch_dir/xapian"
 
 # Keep a deep ladder rather than a few days. This is an archive: the failure
 # mode worth defending against is quiet corruption or an accidental mass
