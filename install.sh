@@ -113,14 +113,20 @@ if [ "$CODESPACES" == "true" ]; then
   fi
 
   fancy_echo "Installing vim plugins"
-  if [ -e "$HOME"/.vim/autoload/plug.vim ]; then
-    vim -E -s +PlugUpgrade +qa
+  # Some codespace images ship without vim; under set -e the plugin step
+  # then ended the install before Claude Code and the gems.
+  if command -v vim &>/dev/null; then
+    if [ -e "$HOME"/.vim/autoload/plug.vim ]; then
+      vim -E -s +PlugUpgrade +qa
+    else
+      curl -fLo "$HOME"/.vim/autoload/plug.vim --create-dirs \
+        https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+    fi
+    mkdir -p ~/.vim-tmp # add vim backup directory to prevent errors like https://stackoverflow.com/questions/8428210/cannot-create-backup-fileadd-to-overwrite
+    vim +PlugUpdate +PlugClean! +qa
   else
-    curl -fLo "$HOME"/.vim/autoload/plug.vim --create-dirs \
-      https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+    fancy_echo "No vim in this image; skipping vim plugins"
   fi
-  mkdir -p ~/.vim-tmp # add vim backup directory to prevent errors like https://stackoverflow.com/questions/8428210/cannot-create-backup-fileadd-to-overwrite
-  vim +PlugUpdate +PlugClean! +qa
 
   fancy_echo "Installing Claude Code and gems (parallel)"
   if ! command -v claude &>/dev/null; then
