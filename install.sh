@@ -132,7 +132,32 @@ if [ "$CODESPACES" == "true" ]; then
   if ! command -v claude &>/dev/null; then
     curl -fsSL https://claude.ai/install.sh | bash &
   fi
-  sudo gem install git_remote_branch ripper-tags &
+  # gem is not on PATH here when Ruby comes from mise or rbenv (they activate in
+  # interactive shells only), and sudo's secure_path never has it, so the old
+  # `sudo gem install` failed with "gem: command not found". Find it, and use
+  # sudo only when its gem directory is not ours to write.
+  install_gems() {
+    local gem_bin candidate
+    gem_bin="$(command -v gem || true)"
+    for candidate in "$HOME/.local/share/mise/shims/gem" "$HOME/.rbenv/shims/gem" /usr/local/rvm/rubies/default/bin/gem; do
+      [ -n "$gem_bin" ] && break
+      [ -x "$candidate" ] && gem_bin="$candidate"
+    done
+    # A shim calls its manager (mise) and gem calls ruby, both by name, so their
+    # directories go on PATH too. This runs in a background subshell, so the
+    # change stays here.
+    [ -n "$gem_bin" ] && PATH="$(dirname "$gem_bin"):$HOME/.local/bin:$PATH"
+    if [ -z "$gem_bin" ]; then
+      fancy_echo "No Ruby in this image; skipping gems"
+      return 0
+    fi
+    if [ -w "$("$gem_bin" environment gemdir)" ]; then
+      "$gem_bin" install git_remote_branch ripper-tags
+    else
+      sudo "$gem_bin" install git_remote_branch ripper-tags
+    fi
+  }
+  install_gems &
   wait
 
   # Run pre-push git commit hook to check code owners
