@@ -32,6 +32,15 @@
             "command": "$HOME/bin/claude-tmux-name"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/bin/claude-memory-sync pull",
+            "timeout": 60
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -60,6 +69,15 @@
           {
             "type": "command",
             "command": "$HOME/bin/claude-tmux-name --clear"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/bin/claude-memory-sync push",
+            "timeout": 60
           }
         ]
       }

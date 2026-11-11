@@ -39,7 +39,7 @@ if [ "$CODESPACES" == "true" ]; then
 
   fancy_echo "Installing packages via apt"
   sudo apt-get update -qq
-  sudo apt-get install -y -q fzf stow ripgrep direnv tmux zsh universal-ctags zsh-autosuggestions
+  sudo apt-get install -y -q fzf stow ripgrep direnv tmux zsh universal-ctags zsh-autosuggestions jq
 
   if ! command -v delta &>/dev/null; then
     fancy_echo "Installing git-delta"
@@ -109,6 +109,27 @@ if [ "$CODESPACES" == "true" ]; then
   if [ -d "/workspaces/github" ]; then
     echo "Setting up commit hook for codeowners"
     cd /workspaces/github && ln -s $(pwd)/script/git-hooks/pre-push .git/hooks/pre-push
+  fi
+
+  # Claude Code memory, one private repo per project (claude/bin/claude-memory-sync
+  # explains the layout and the per-project token). The claude package is not
+  # stowed here, since its settings carry desktop-only hooks, so link the script
+  # and add only its two hooks.
+  fancy_echo "Setting up Claude memory sync"
+  mkdir -p "$HOME/bin" "$HOME/.claude"
+  ln -sf "$DOTFILES_DIR/claude/bin/claude-memory-sync" "$HOME/bin/claude-memory-sync"
+  claude_settings="$HOME/.claude/settings.json"
+  [ -s "$claude_settings" ] || echo '{}' > "$claude_settings"
+  if ! grep -q claude-memory-sync "$claude_settings"; then
+    jq '.hooks.SessionStart += [{"hooks":[{"type":"command","command":"$HOME/bin/claude-memory-sync pull","timeout":60}]}]
+      | .hooks.SessionEnd += [{"hooks":[{"type":"command","command":"$HOME/bin/claude-memory-sync push","timeout":60}]}]' \
+      "$claude_settings" > "$claude_settings.tmp" && mv "$claude_settings.tmp" "$claude_settings"
+  fi
+  # Fetch now if the token is already in this environment; if not, the first
+  # Claude session's SessionStart hook does it.
+  project_dir="/workspaces/${GITHUB_REPOSITORY#*/}"
+  if [ -d "$project_dir" ]; then
+    (cd "$project_dir" && "$HOME/bin/claude-memory-sync" pull </dev/null) || true
   fi
 
   fancy_echo "All done"

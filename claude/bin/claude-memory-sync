@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+# Keeps a project's Claude Code memory in its own private GitHub repo, so it
+# follows the project into codespaces without ever entering this public repo.
+#
+#   claude-memory-sync pull    SessionStart hook: clone if missing, else pull
+#   claude-memory-sync push    SessionEnd hook: commit and push any changes
+#   claude-memory-sync init    once per project, on a machine that has memory
+#   claude-memory-sync status  where this project's memory lives and syncs
+#
+# One private repo per project, by convention <owner>/claude-memory-<repo>,
+# where <repo> is the project's own GitHub repo name. Owner defaults to
+# wallace (CLAUDE_MEMORY_OWNER overrides).
+#
+# Access, per project, so one client's codespace can never read another's
+# memory: a fine-grained token with Contents read/write on that memory repo
+# only, stored as the Codespaces secret CLAUDE_MEMORY_TOKEN_<REPO> (upper case,
+# non-alphanumerics as _) and granted only to that project's repository.
+# Without the variable (on a desktop), git's normal credentials are used.
+#
+# The memory directory is ~/.claude/projects/<key>/memory, where <key> is the
+# project's main checkout path with every character outside [A-Za-z0-9-]
+# replaced by "-". Worktrees resolve to their main checkout.
+#
+# Hooks must never break a session: this always exits 0, writes nothing to
+# stdout (SessionStart stdout becomes session context), and reports problems on
+# stderr. On a conflict it keeps the local copy and says so rather than merging.
+
+set -uo pipefail
+
+cmd="${1:-status}"
+owner="${CLAUDE_MEMORY_OWNER:-wallace}"
+
+say() { printf 'claude-memory-sync: %s\n' "$*" >&2; }
+
+# Hook input is JSON on stdin with the session's cwd; outside a hook, use $PWD.
+cwd="$PWD"
+if [ ! -t 0 ]; then
+  input="$(cat)"
+  hook_cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"
+  [ -n "$hook_cwd" ] && cwd="$hook_cwd"
+fi
+
+# The main checkout, so a session in a linked worktree shares its project's memory.
+common="$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || exit 0
+root="$(dirname "$common")"
+
+key="$(printf '%s' "$root" | sed 's/[^A-Za-z0-9-]/-/g')"
+mem="$HOME/.claude/projects/$key/memory"
+
+origin="$(git -C "$root" remote get-url origin 2>/dev/null)" || exit 0
+name="$(basename "$origin" .git)"
+remote_repo="$owner/claude-memory-$name"
+remote_url="https://github.com/$remote_repo.git"
+token_var="CLAUDE_MEMORY_TOKEN_$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')"
+token="${!token_var:-}"
+
+# git with this project's token when there is one. The empty helper first
+# clears inherited ones: a codespace's own helper answers for github.com with a
+# token scoped to the codespace's repository, which cannot see the memory repo.
+# The token is handed over per command and never written to disk.
+g() {
+  if [ -n "$token" ]; then
+    TOKEN="$token" git -c credential.helper= \
+      -c 'credential.helper=!f() { echo username=x-access-token; echo "password=$TOKEN"; }; f' \
+      -c commit.gpgsign=false "$@"
+  else
+    git -c commit.gpgsign=false "$@"
+  fi
+}
+
+# Two sessions ending together would otherwise fight over the index.
+lock() {
+  mkdir -p "$mem"
+  exec 9>"$mem/.sync.lock"
+  flock -w 30 9 || { say "another sync holds $mem; skipped"; exit 0; }
+}
+
+is_repo() { [ -d "$mem/.git" ]; }
+
+identity() {
+  # A fresh codespace may have no git identity; memory commits need one.
+  git -C "$mem" config user.email >/dev/null 2>&1 ||
+    git -C "$mem" config user.email "claude-memory@$(hostname)"
+  git -C "$mem" config user.name >/dev/null 2>&1 ||
+    git -C "$mem" config user.name "claude-memory-sync"
+}
+
+case "$cmd" in
+  pull)
+    lock
+    if is_repo; then
+      g -C "$mem" pull -q --rebase --autostash 2>/dev/null ||
+        { g -C "$mem" rebase --abort 2>/dev/null; say "pull of $remote_repo failed or conflicted; kept the local copy"; }
+    elif [ -z "$(ls -A "$mem" 2>/dev/null | grep -v '^\.sync\.lock$')" ]; then
+      # Nothing here yet: fetch the project's memory if it has a repo.
+      tmp="$(mktemp -d)"
+      if g clone -q "$remote_url" "$tmp/memory" 2>/dev/null; then
+        cp -a "$tmp/memory/." "$mem/"
+        identity
+      fi
+      rm -rf "$tmp"
+    fi
+    ;;
+
+  push)
+    is_repo || exit 0
+    lock
+    identity
+    if [ -n "$(git -C "$mem" status --porcelain)" ]; then
+      git -C "$mem" add -A
+      g -C "$mem" commit -q -m "Memory from $(hostname), $(date +%F)"
+    fi
+    if ! git -C "$mem" rev-parse '@{u}' >/dev/null 2>&1; then
+      g -C "$mem" push -q -u origin HEAD 2>/dev/null || say "push to $remote_repo failed; will retry at the next session end"
+    elif [ -n "$(git -C "$mem" log --oneline '@{u}..HEAD')" ]; then
+      if ! g -C "$mem" pull -q --rebase 2>/dev/null; then
+        g -C "$mem" rebase --abort 2>/dev/null
+        say "memory changed on both sides; kept the local commit unpushed in $mem. Resolve with git there."
+        exit 0
+      fi
+      g -C "$mem" push -q -u origin HEAD 2>/dev/null || say "push to $remote_repo failed; will retry at the next session end"
+    fi
+    ;;
+
+  init)
+    exec 0</dev/null
+    if is_repo; then say "$mem is already a checkout of $(git -C "$mem" remote get-url origin)"; exit 0; fi
+    [ -d "$mem" ] || { say "no memory at $mem yet"; exit 0; }
+    gh repo view "$remote_repo" >/dev/null 2>&1 || gh repo create "$remote_repo" --private \
+      --description "Claude Code memory for $name (private)" >/dev/null || { say "could not create $remote_repo"; exit 0; }
+    [ "$(gh repo view "$remote_repo" --json visibility --jq .visibility)" = "PRIVATE" ] ||
+      { say "$remote_repo is not private; refusing to push memory to it"; exit 0; }
+    lock
+    git -C "$mem" init -q -b main
+    printf '# Machine-local sync state.\n/.sync.lock\n' > "$mem/.gitignore"
+    identity
+    git -C "$mem" add -A
+    g -C "$mem" commit -q -m "Memory as of $(date +%F), from $(hostname)"
+    git -C "$mem" remote add origin "$remote_url"
+    g -C "$mem" push -q -u origin main && say "pushed $mem to $remote_repo (private)"
+    say "for codespaces: create a fine-grained token (Contents: read and write, $remote_repo only) and store it as the Codespaces secret $token_var, available to ${origin#*github.com[:/]} only"
+    ;;
+
+  status)
+    echo "project:  $root"
+    echo "memory:   $mem"
+    echo "repo:     $remote_repo"
+    echo "token:    $token_var $( [ -n "$token" ] && echo '(set)' || echo '(unset; using git credentials)')"
+    is_repo && git -C "$mem" status -sb | head -1 || echo "sync:     not a checkout (run init, or pull in a codespace)"
+    ;;
+
+  *) say "unknown command: $cmd"; exit 0 ;;
+esac
+exit 0
